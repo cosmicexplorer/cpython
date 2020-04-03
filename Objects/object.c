@@ -1,4 +1,3 @@
-
 /* Generic object operations; and implementation of None */
 
 #include "Python.h"
@@ -11,6 +10,8 @@
 #include "pycore_pystate.h"
 #include "frameobject.h"
 #include "interpreteridobject.h"
+
+#include "pdmp.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -1809,6 +1810,7 @@ _PyTypes_Init(void)
     INIT_TYPE(&PyCoro_Type, "coroutine");
     INIT_TYPE(&_PyCoroWrapper_Type, "coroutine wrapper");
     INIT_TYPE(&_PyInterpreterID_Type, "interpreter ID");
+    INIT_TYPE(&Pdmp_Type, "pdmp");
     return _PyStatus_OK();
 
 #undef INIT_TYPE

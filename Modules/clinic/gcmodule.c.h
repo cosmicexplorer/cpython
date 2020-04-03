@@ -382,22 +382,4 @@ gc_get_freeze_count(PyObject *module, PyObject *Py_UNUSED(ignored))
 exit:
     return return_value;
 }
-
-PyDoc_STRVAR(gc_pdmp_dump__doc__,
-"pdmp_dump($module, obj, fd, /)\n"
-"--\n"
-"\n"
-"Dump a portable representation of some portion of the GC state to disk.");
-
-#define GC_PDMP_DUMP_METHODDEF \
-    {"pdmp_dump", (PyCFunction)gc_pdmp_dump, METH_O, gc_pdmp_dump__doc__},
-
-PyDoc_STRVAR(gc_pdmp_load__doc__,
-"pdmp_load($module, fd, /)\n"
-"--\n"
-"\n"
-"Load a portable representation of some portion of the GC state from disk.");
-
-#define GC_PDMP_LOAD_METHODDEF \
-    {"pdmp_load", (PyCFunction)gc_pdmp_load, METH_O, gc_pdmp_load__doc__},
 /*[clinic end generated code: output=bd6a8056989e2e69 input=a9049054013a1b77]*/
