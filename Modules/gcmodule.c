@@ -2228,13 +2228,17 @@ static int gc_pdmp_map(pdmp *pdmp) {
     if (_Py_fstat(pdmp->fd, &status)) {
         goto error;
     }
-
+    if (status.st_size == 0) {
+        PyErr_SetString(PyExc_ValueError, "pdmp mapped file had 0 bytes");
+        goto error;
+    }
     pdmp->mapped_memory_length = status.st_size;
-    pdmp->mapped_memory_region = mmap(NULL, pdmp->mapped_memory_length,
-                                      PROT_READ, MAP_PRIVATE, pdmp->fd, 0);
 
+    pdmp->mapped_memory_region =
+        mmap(NULL, pdmp->mapped_memory_length, PROT_READ,
+             MAP_FILE | MAP_PRIVATE, pdmp->fd, 0);
     if (pdmp->mapped_memory_region == MAP_FAILED) {
-        PyErr_SetFromErrno(PyExc_OSError);
+        PyErr_SetFromErrnoWithFilenameObject(PyExc_OSError, pdmp->dump_filename);
         goto error;
     }
 
@@ -2264,6 +2268,7 @@ static PyObject *pdmp_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     }
 
     pdmp->fd = -1;
+    pdmp->dump_filename = Py_None;
     pdmp->mapped_memory_length = -1;
     pdmp->mapped_memory_region = NULL;
     pdmp->header = NULL;
@@ -2276,6 +2281,7 @@ static PyObject *pdmp_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 
 static int pdmp_init(pdmp *self, PyObject *args, PyObject *kwds) {
     PyObject *file_handle = NULL;
+    PyObject *dump_filename;
     int fd;
 
     if (!_PyArg_NoKeywords(Py_TYPE(self)->tp_name, kwds)) {
@@ -2293,21 +2299,48 @@ static int pdmp_init(pdmp *self, PyObject *args, PyObject *kwds) {
         return -1;
     }
 
+    dump_filename = PyObject_GetAttrString(file_handle, "name");
+
     self->fd = fd;
+    self->dump_filename = dump_filename;
+
     return 0;
 }
 
+static bool pdmp_is_mapped(pdmp *self) {
+    if (self->mapped_memory_length >= 0) {
+        return true;
+    }
+    return false;
+}
+
+static void pdmp_dealloc(pdmp *pdmp) {
+    _PyObject_GC_UNTRACK(pdmp);
+    Py_XDECREF(pdmp->dump_filename);
+    PyObject_GC_Del(pdmp);
+}
+
 static PyObject *pdmp_repr(pdmp *pdmp) {
-    PyObject *result = NULL, *keys, *listrepr, *tmp;
+    PyObject *result = NULL;
     int status = Py_ReprEnter((PyObject *)pdmp);
 
     if (status != 0) {
-        if (status < 0)
+        if (status < 0) {
             return NULL;
-        return PyUnicode_FromFormat("%s(...)", Py_TYPE(pdmp)->tp_name);
+        }
+        result = PyUnicode_FromFormat("%s(...)", Py_TYPE(pdmp)->tp_name);
+        goto done;
     }
 
-    result = PyUnicode_FromFormat("%s()", Py_TYPE(pdmp)->tp_name);
+    if (pdmp_is_mapped(pdmp)) {
+        result = PyUnicode_FromFormat(
+            "%s('{%U}', <mapped to %d bytes>)", Py_TYPE(pdmp)->tp_name,
+            pdmp->dump_filename, pdmp->mapped_memory_length);
+    } else {
+        result =
+            PyUnicode_FromFormat("%s('{%U}', <unmapped...>)",
+                                 Py_TYPE(pdmp)->tp_name, pdmp->dump_filename);
+    }
 
 done:
     Py_ReprLeave((PyObject *)pdmp);
@@ -2321,28 +2354,23 @@ static PyObject *pdmp_fileno(pdmp *self, PyObject *Py_UNUSED(ignored)) {
     return PyLong_FromSsize_t(self->fd);
 }
 
-static bool pdmp_is_mapped(pdmp *self) {
-    if (self->mapped_memory_length >= 0) {
-        return true;
-    }
-    return false;
-}
-
 PyDoc_STRVAR(pdmp_enter_doc, "Mmap the associated file.");
 
 static PyObject *pdmp_enter(pdmp *self, PyObject *Py_UNUSED(ignored)) {
     if (pdmp_is_mapped(self)) {
         PyErr_SetString(PyExc_ValueError,
                         "cannot re-map an already-mapped pdmp object");
-        goto done;
+        goto error;
     }
 
-    if (gc_pdmp_map(pdmp)) {
-        goto done;
+    if (gc_pdmp_map(self)) {
+        goto error;
     }
 
-done:
     return self;
+
+error:
+    return NULL;
 }
 
 static PyObject *pdmp_exit(pdmp *self, PyObject *Py_UNUSED(ignored)) {
@@ -2369,7 +2397,7 @@ PyTypeObject Pdmp_Type = {
     sizeof(pdmp),                                  /* tp_basicsize */
     0,                                             /* tp_itemsize */
     /* methods */
-    0,                           /* tp_dealloc */
+    (destructor)pdmp_dealloc,    /* tp_dealloc */
     0,                           /* tp_vectorcall_offset */
     0,                           /* tp_getattr */
     0,                           /* tp_setattr */

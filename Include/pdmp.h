@@ -32,7 +32,8 @@ struct dump_reloc_entry {
 typedef struct {
     PyObject_HEAD
 
-        Py_ssize_t fd;
+    Py_ssize_t fd;
+    PyObject* dump_filename;
     Py_ssize_t mapped_memory_length;
     void *mapped_memory_region;
 
