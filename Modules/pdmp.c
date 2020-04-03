@@ -43,51 +43,54 @@ static bool pdmp_header_validate(struct dump_header *header) {
            (memcmp(header->fingerprint, fingerprint, sizeof(fingerprint)) == 0);
 }
 
-static PyObject *pdmp_dump_impl(struct dump_context *dump_context) {
-    return NULL;
+/* Append obj to list; return true if error (out of memory), false if OK. */
+static int pdmp_referentsvisit(PyObject *obj, PyObject *list) {
+    return PyList_Append(list, obj) < 0;
 }
 
-static PyObject *pdmp_dump_old(PyObject *Py_UNUSED(module), PyObject *obj,
-                              PyObject *fd_obj)
-{
-    int fd;
-    PyObject *dump_filename;
-    struct dump_context dump_context;
-    PyObject *result = Py_None;
+static PyObject *pdmp_get_referents(PyObject *obj) {
+    PyObject *result = PyList_New(0);
+    traverseproc traverse;
 
-    if (fd_obj == NULL || fd_obj == Py_None) {
-        PyErr_SetString(PyExc_TypeError, "provided fd was NULL or None");
-        goto error;
+    if (result == NULL) {
+        return NULL;
     }
 
-    fd = PyObject_AsFileDescriptor(fd_obj);
-    if (fd == -1) {
-        PyErr_SetString(
-            PyExc_TypeError,
-            "provided fd did not point to an existing file descriptor");
-        goto error;
+    if (!PyObject_IS_GC(obj)) {
+        goto done;
     }
 
-    dump_filename = PyObject_GetAttrString(fd_obj, "name");
+    traverse = Py_TYPE(obj)->tp_traverse;
+    if (!traverse) {
+        goto done;
+    }
+    if (traverse(obj, (visitproc)pdmp_referentsvisit, result)) {
+        Py_DECREF(result);
+        return NULL;
+    }
 
-    /* Initialize header. */
-    pdmp_header_init(&dump_context.header);
-    /* Initialize context. */
-    dump_context.source_object = obj;
-    dump_context.fd = fd;
-    dump_context.dump_filename = dump_filename;
+done:
+    return result;
+}
 
-    result = pdmp_dump_impl(&dump_context);
+static PyObject *pdmp_dump_impl(struct dump_context *ctx) {
+    PyObject* result = NULL;
 
-    Py_XDECREF(dump_filename);
+    /* Write the header. */
+    if (_Py_write(ctx->fd, &ctx->header, sizeof(struct dump_header)) != sizeof(struct dump_header)) {
+        PyErr_SetFromErrnoWithFilenameObject(PyExc_OSError, ctx->dump_filename);
+        goto done;
+    }
 
-error:
+    /* TODO: ??? */
 
+done:
     return result;
 }
 
 static int pdmp_map(pdmp *pdmp) {
     struct _Py_stat_struct status;
+
     if (_Py_fstat(pdmp->fd, &status)) {
         goto error;
     }
@@ -218,9 +221,10 @@ static PyObject *pdmp_fileno(pdmp *self, PyObject *Py_UNUSED(ignored)) {
     return PyLong_FromSsize_t(self->fd);
 }
 
-PyDoc_STRVAR(pdmp_filename_doc, "The name of the file associated with the pdmp object.");
+PyDoc_STRVAR(pdmp_filename_doc,
+             "The name of the file associated with the pdmp object.");
 
-static PyObject* pdmp_filename(pdmp* self, PyObject* Py_UNUSED(ignored)) {
+static PyObject *pdmp_filename(pdmp *self, PyObject *Py_UNUSED(ignored)) {
     return self->dump_filename;
 }
 
@@ -237,8 +241,8 @@ static PyObject *pdmp_enter(pdmp *self, PyObject *Py_UNUSED(ignored)) {
         goto error;
     }
 
-    /* FIXME: return the reconstructed object from `self->header.entry_point`, not the 'pdmp'
-       instance itself! */
+    /* FIXME: return the reconstructed object from `self->header.entry_point`,
+       not the 'pdmp' instance itself! */
     return self;
 
 error:
@@ -255,7 +259,28 @@ static PyObject *pdmp_exit(pdmp *self, PyObject *Py_UNUSED(ignored)) {
 PyDoc_STRVAR(pdmp_dump_doc, "Dump the object into the associated file.");
 
 static PyObject *pdmp_dump(pdmp *self, PyObject *obj) {
-    return NULL;
+    struct dump_context dump_context;
+    PyObject *result = NULL;
+
+    /* Initialize header. */
+    pdmp_header_init(&dump_context.header);
+
+    /* Initialize context. */
+    dump_context.source_object = obj;
+    dump_context.fd = self->fd;
+    dump_context.dump_filename = self->dump_filename;
+    dump_context.dump_queue = PyList_New(0);
+
+    if (PyList_Append(dump_context.dump_queue, dump_context.source_object) <
+        0) {
+        goto done;
+    }
+
+    result = pdmp_dump_impl(&dump_context);
+
+done:
+    Py_DECREF(dump_context.dump_queue);
+    return result;
 }
 
 static PyMethodDef pdmp_methods[] = {

@@ -10,18 +10,11 @@ static const char dump_magic[13];
 
 static const unsigned char fingerprint[32];
 
-struct dump_location {
-    /* Index into the dump table entries. */
-    size_t index;
-};
-
 struct dump_header {
     /* File type magic.  */
     char magic[sizeof dump_magic];
 
     unsigned char fingerprint[sizeof fingerprint];
-
-    struct dump_location entry_point;
 };
 
 struct dump_reloc_entry {
@@ -56,7 +49,7 @@ struct dump_context {
     PyObject *dump_filename;
 
     /* Queue of objects to dump.  */
-    /* PyObject* dump_queue; */
+    PyObject* dump_queue;
 };
 
 PyAPI_DATA(PyTypeObject) Pdmp_Type;
