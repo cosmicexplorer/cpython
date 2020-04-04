@@ -3,7 +3,6 @@
 #include "Python.h"
 #include <ctype.h>
 #include "ast.h"
-#include "pdmp.h"
 #undef Yield   /* undefine macro conflicting with <winbase.h> */
 #include "pycore_object.h"
 #include "pycore_pyerrors.h"
@@ -2824,7 +2823,6 @@ _PyBuiltin_Init(PyThreadState *tstate)
     SETBUILTIN("range",                 &PyRange_Type);
     SETBUILTIN("reversed",              &PyReversed_Type);
     SETBUILTIN("set",                   &PySet_Type);
-    SETBUILTIN("pdmp",                  &Pdmp_Type);
     SETBUILTIN("slice",                 &PySlice_Type);
     SETBUILTIN("staticmethod",          &PyStaticMethod_Type);
     SETBUILTIN("str",                   &PyUnicode_Type);

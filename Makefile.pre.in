@@ -208,7 +208,7 @@ CONFIG_ARGS=	@CONFIG_ARGS@
 
 
 # Subdirectories with code
-SRCDIRS=	@SRCDIRS@
+SRCDIRS= 	@SRCDIRS@
 
 # Other subdirectories
 SUBDIRSTOO=	Include Lib Misc
@@ -276,8 +276,7 @@ MODULE_OBJS=	\
 		Modules/config.o \
 		Modules/getpath.o \
 		Modules/main.o \
-		Modules/gcmodule.o \
-		Modules/pdmp.o
+		Modules/gcmodule.o
 
 IO_H=		Modules/_io/_iomodule.h
 
@@ -1615,7 +1614,7 @@ libainstall:	@DEF_MAKE_RULE@ python-config
 # This goes into $(exec_prefix)
 sharedinstall: sharedmods
 	$(RUNSHARED) $(PYTHON_FOR_BUILD) $(srcdir)/setup.py install \
-		--prefix=$(prefix) \
+	   	--prefix=$(prefix) \
 		--install-scripts=$(BINDIR) \
 		--install-platlib=$(DESTSHARED) \
 		--root=$(DESTDIR)/
