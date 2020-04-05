@@ -1589,6 +1589,7 @@ allocate_from_new_pool(uint size)
 static inline void*
 pymalloc_alloc(void *ctx, size_t nbytes)
 {
+    /* TODO: add some logic here to record how large the allocation was! */
 #ifdef WITH_VALGRIND
     if (UNLIKELY(running_on_valgrind == -1)) {
         running_on_valgrind = RUNNING_ON_VALGRIND;

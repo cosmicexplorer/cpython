@@ -11,8 +11,10 @@ import os
 import pickle
 import struct
 import sys
+from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import Enum
 from functools import cached_property
 from pathlib import Path
 from queue import Queue
@@ -108,16 +110,12 @@ class Obarray:
         return already_exists
 
 
-@dataclass
+@dataclass(frozen=True)
 class pdmp:
     file_path: Path
 
     def _get_mapped_memory_length(self) -> int:
         return os.stat(self.file_path).st_size
-
-    def __init__(self, file_path: Path) -> None:
-        assert file_path.is_file(), f'pdmp file must point to existing path! was: {file_path}'
-        self.file_path = file_path
 
     def load(self) -> Any:
         with self._read_handle() as read_mmap:
@@ -179,7 +177,11 @@ class pdmp:
         finally:
             mapping.close()
 
-    def _dump_volatile_memory(self, source_object: Any) -> Tuple[int, bytes, List[DumpRelocationEntry]]:
+    def _dump_volatile_memory(
+            self,
+            file_handle,
+            source_object: Any,
+    ) -> Tuple[int, bytes, List[DumpRelocationEntry]]:
         obarray = Obarray()
         dump_queue = Queue()
         dump_entries: List[DumpRelocationEntry] = []
@@ -211,33 +213,27 @@ class pdmp:
             # Bump the offset.
             total_offset += entry.extent
 
-        all_file_bytes = b''
-
-        # Write entries to a `bytes`.
+        # Write entries to the pdmp file.
         num_objects_dumped = len(dump_entries)
-        all_file_bytes += _pack_n_longs(num_objects_dumped)
+        file_handle.write(_pack_n_longs(num_objects_dumped))
 
         for entry in dump_entries:
-            all_file_bytes += entry.pack_relocation_entry_bytes()
+            file_handle.write(entry.pack_relocation_entry_bytes())
 
-        end_of_entries_offset = len(all_file_bytes)
+        end_of_entries_offset = file_handle.tell()
 
         for entry in dump_entries:
-            all_file_bytes += entry.as_volatile_bytes()
+            file_handle.write(entry.as_volatile_bytes())
 
-        return (end_of_entries_offset, all_file_bytes, dump_entries)
+        return (end_of_entries_offset, dump_entries)
 
     def dump(self, source_object: Any) -> List[DumpRelocationEntry]:
-        end_of_entries_offset, all_file_bytes, dump_entries = self._dump_volatile_memory(source_object)
-
         # Write entries to the file.
         with self._acquire_write_file_handle(truncate=True) as file_handle:
-            written = file_handle.write(all_file_bytes)
-            if written != len(all_file_bytes):
-                raise ByteConsistencyError(f'written bytes {written} was not equal to expected length of full pdmp file: {len(all_file_bytes)}!')
+            end_of_entries_offset, dump_entries = self._dump_volatile_memory(file_handle, source_object)
 
-        with self._acquire_write_file_handle(truncate=False) as file_handle:
-            with self._open_write_mapping(file_handle.fileno()) as mapping:
+        with self._acquire_write_file_handle(truncate=False) as file_handle,\
+             self._open_write_mapping(file_handle.fileno()) as mapping:
                 relocation_table = RelocationTable(
                     mmap=mapping,
                     end_of_entries_offset=end_of_entries_offset,
@@ -247,3 +243,54 @@ class pdmp:
                     import pdb; pdb.set_trace()
 
         return dump_entries
+
+
+@dataclass(frozen=True)
+class PythonTypeName:
+    name: str
+
+
+@dataclass(frozen=True)
+class NativeTypeName:
+    name: str
+
+
+@dataclass(frozen=True)
+class FieldName:
+    name: str
+
+
+class ObjectType(Enum):
+    plain_old_data = 'plain-old-data'
+    pointer = 'pointer'
+
+
+@dataclass(frozen=True)
+class ObjectField:
+    object_type: ObjectType
+    # the PySetObject's `.smalltable` field allocates some stack space for things, with a
+    # statically-known length. The `.table` field is then set to point to `.smalltable` for small
+    # sets.
+    # However, as in PyBytesObject, `.ob_sval[1]` will always be pointing to something with
+    # `.ob_size` elements. So we will want to look that one up in the allocation database we build
+    # in `pymalloc_alloc` first, before assuming it's just size 1, for example.
+    intrusive_length_hint: Optional[int]
+
+
+@dataclass(frozen=True)
+class LibclangNativeObjectDescriptor:
+    native_type_name: NativeTypeName
+    fields: OrderedDict[FieldName, ObjectField]
+
+    @classmethod
+    def from_object(cls, source_object: Any) -> LibclangNativeObjectDescriptor:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class LibclangDatabase:
+    known_objects: OrderedDict[PythonTypeName, LibclangNativeObjectDescriptor]
+
+    @classmethod
+    def from_file(cls) -> LibclangDatabase:
+        raise NotImplementedError
