@@ -1826,11 +1826,6 @@ static PyObject *gc_pdmp_write_relocatable_object(PyObject *module,
     return PyBytes_FromStringAndSize((const char *)source_object, object_size);
 }
 
-static PyObject *gc_pdmp_traverse(PyObject *module, PyObject *args,
-                                  PyObject *kwds) {
-    
-}
-
 PyDoc_STRVAR(
     gc__doc__,
     "This module provides access to the garbage collector for reference "

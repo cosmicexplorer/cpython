@@ -15,6 +15,7 @@ import struct
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from queue import Queue
 from typing import Any, Dict, List, Optional
@@ -27,17 +28,29 @@ _SIZE_BYTES_LONG = 8
 class DumpRelocationEntry:
     source_object: Any
     base_offset: int
-    referents: List[Any]
+
+    @property
+    def volatile_memory_id(self) -> int:
+        return id(self.source_object)
 
     def __post_init__(self) -> None:
         assert self.base_offset >= 0
 
-    @property
+    @cached_property
     def extent(self) -> int:
         return sys.getsizeof(self.source_object)
 
+    @cached_property
+    def referents(self) -> List[Any]:
+        return list(gc.get_referents(self.source_object))
+
     def as_relocation_entry(self) -> bytes:
-        return struct.pack('ll', self.base_offset, self.extent)
+        num_refs = len(self.referents)
+        ref_ids = [id(obj) for obj in self.referents]
+        return struct.pack(
+            'llll' + ('l' * num_refs),
+            self.volatile_memory_id, self.base_offset, self.extent, num_refs,
+            *ref_ids)
 
     def as_relocatable_bytes(self) -> bytes:
         return gc.pdmp_write_relocatable_object(self.source_object, self.extent)
@@ -47,12 +60,12 @@ class Obarray:
     """Named after emacs's `obarray` type, which stores the interned symbol table."""
 
     def __init__(self) -> None:
-        self._obarray: Dict[int, Any] = {}
+        self._obarray: Dict[int, DumpRelocationEntry] = {}
 
-    def put(self, obj: Any) -> bool:
-        already_exists = id(obj) in self._obarray
+    def put(self, entry: DumpRelocationEntry) -> bool:
+        already_exists = entry.volatile_memory_id in self._obarray
         if not already_exists:
-            self._obarray[id(obj)] = obj
+            self._obarray[entry.volatile_memory_id] = entry
         return already_exists
 
 
@@ -146,15 +159,16 @@ class pdmp:
         total_offset: int = 0
         while not dump_queue.empty():
             obj = dump_queue.get()
-            if obarray.put(obj):
-                continue
 
             # Produce a description of the object in memory.
             entry = DumpRelocationEntry(
                 source_object=obj,
                 base_offset=total_offset,
-                referents=gc.get_referents(obj),
             )
+
+            # If the object was already seen, do not attempt to register it again.
+            if obarray.put(entry):
+                continue
 
             # Add all objects this one references to the stack to search.
             for ref in entry.referents:
