@@ -66,7 +66,7 @@ class LoadRelocationEntry:
     original_volatile_memory_id: int
     base_offset: int
     extent: int
-    referents: List[int]
+    referents: Tuple[int, ...]
     source_object: Any
 
 
@@ -122,10 +122,12 @@ class pdmp:
             volatile_memory_id, offset, extent, num_refs = _unpack_n_longs(self.mmap, 4)
             referents = _unpack_n_longs(self.mmap, num_refs)
             relocation_info_tuples.append((
-                volatile_memory_id, offset, extent, num_refs, list(referents),
+                volatile_memory_id, offset, extent, num_refs, referents,
             ))
 
         end_of_entries_offset = self.mmap.tell()
+
+        import pdb; pdb.set_trace()
 
         relocation_entries: List[LoadRelocationEntry] = []
         for volatile_memory_id, offset, extent, num_refs, referents in relocation_info_tuples:

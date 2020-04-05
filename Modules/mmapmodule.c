@@ -258,13 +258,11 @@ PyDoc_STRVAR(mmap_read_object_at_doc,
 "\n"
 "Read a PyObject* from the position in the mapping.");
 
-static PyObject *mmap_read_object_at(mmap_object *self, PyObject *args) {
+static PyObject *mmap_read_object_at(mmap_object *self, PyObject *args, PyObject *kwds) {
     CHECK_VALID(NULL);
-    Py_ssize_t pos = PY_SSIZE_T_MAX;
-    if (!PyArg_ParseTuple(args, "|O&:read", _Py_convert_optional_to_ssize_t, &pos)) {
-        return(NULL);
-    }
-    return (PyObject*)&self->data[pos];
+    PyObject *offset_object = PyTuple_GetItem(args, 0);
+    long offset = PyLong_AsLong(offset_object);
+    return (PyObject*)&self->data[offset];
 }
 
 static PyObject *
