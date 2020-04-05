@@ -67,7 +67,9 @@ class LoadRelocationEntry:
     base_offset: int
     extent: int
     referents: Tuple[int, ...]
-    source_object: Any
+
+    def read_source_object_bytes(self, file_handle) -> bytes:
+        return file_handle.read(self.extent)
 
 
 class Obarray:
@@ -117,33 +119,19 @@ class pdmp:
         self.mmap.seek(0)
         (num_objects_dumped,) = _unpack_n_longs(self.mmap, 1)
 
-        relocation_info_tuples = []
+        relocation_entries: List[LoadRelocationEntry] = []
         for _ in range(num_objects_dumped):
             volatile_memory_id, offset, extent, num_refs = _unpack_n_longs(self.mmap, 4)
             referents = _unpack_n_longs(self.mmap, num_refs)
-            relocation_info_tuples.append((
-                volatile_memory_id, offset, extent, num_refs, referents,
-            ))
-
-        end_of_entries_offset = self.mmap.tell()
-
-        import pdb; pdb.set_trace()
-
-        relocation_entries: List[LoadRelocationEntry] = []
-        for volatile_memory_id, offset, extent, num_refs, referents in relocation_info_tuples:
-            stored_object_location = end_of_entries_offset + offset
-            ### READ OBJECT FROM RAW MEMORY!!! UNSAFE!!!! ###
-            import pdb; pdb.set_trace()
-            # FIXME: currently fails with "bus error: python.exe" (probably a segfault)!
-            stored_object = self.mmap.read_object_at(stored_object_location)
             entry = LoadRelocationEntry(
                 original_volatile_memory_id=volatile_memory_id,
                 base_offset=offset,
                 extent=extent,
-                referents=list(referents),
-                source_object=stored_object,
+                referents=referents,
             )
             relocation_entries.append(entry)
+
+        end_of_entries_offset = self.mmap.tell()
 
         return relocation_entries
 
