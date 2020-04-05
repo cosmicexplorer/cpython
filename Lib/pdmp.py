@@ -5,6 +5,7 @@
     Methods that allow interacting with a `pdmp` type.
 """
 
+import ctypes
 import gc
 import mmap
 import os
@@ -280,17 +281,81 @@ class ObjectField:
 @dataclass(frozen=True)
 class LibclangNativeObjectDescriptor:
     native_type_name: NativeTypeName
-    fields: OrderedDict[FieldName, ObjectField]
+    fields: OrderedDict  # [FieldName, ObjectField]
 
     @classmethod
-    def from_object(cls, source_object: Any) -> LibclangNativeObjectDescriptor:
+    def from_object(cls, source_object: Any) -> 'LibclangNativeObjectDescriptor':
         raise NotImplementedError
 
 
 @dataclass(frozen=True)
-class LibclangDatabase:
-    known_objects: OrderedDict[PythonTypeName, LibclangNativeObjectDescriptor]
+class LibclangHandle:
+    lib: ctypes.CDLL
+    cpython_checkout: Path
+
+    def __post_init__(self) -> None:
+        assert self.cpython_checkout.is_absolute(), f'path to cpython checkout at {self.cpython_checkout} was not absolute!'
+
+    @cached_property
+    def cx_index(self) -> ctypes.c_void_p:
+        return self.lib.clang_createIndex(
+            ctypes.c_int(0),    # excludeDeclarationsFromPCH
+            ctypes.c_int(1),    # displayDiagnostics
+        )
+
+    @cached_property
+    def _include_dirs(self) -> List[Path]:
+        return [
+            Path('/usr/local/opt/llvm/include'),
+            Path('/usr/include'),
+            self.cpython_checkout,
+            self.cpython_checkout / 'Include',
+            self.cpython_checkout / 'Objects',
+            self.cpython_checkout / 'Python',
+            self.cpython_checkout / 'Doc' / 'includes',
+        ]
+
+    @cached_property
+    def _clang_args(self) -> List[str]:
+        return [
+            '-x', 'c',
+            *[f'-I{d}' for d in self._include_dirs]
+        ]
 
     @classmethod
-    def from_file(cls) -> LibclangDatabase:
+    def _encode_path(cls, path: Path) -> ctypes.c_char_p:
+        return ctypes.c_char_p(str(path).encode('ascii'))
+
+    @cached_property
+    def _clang_args_ctypes(self):
+        ArgsType = ctypes.c_char_p * len(self._clang_args)
+        args = ArgsType(*[
+            ctypes.c_char_p(arg.encode('ascii'))
+            for arg in self._clang_args
+        ])
+        return (args, len(self._clang_args))
+
+    def tu_from_source_file(self, source_file: Path):
+        assert not source_file.is_absolute(), f'C source file path must be relative to cpython checkout at {self.cpython_checkout}! was: {source_file}'
+        full_path = self.cpython_checkout / source_file
+
+        clang_args, num_clang_args = self._clang_args_ctypes
+
+        return self.lib.clang_parseTranslationUnit(
+            self.cx_index,                      # CIdx
+            self._encode_path(full_path),       # source_filename
+            clang_args,                         # command_line_args
+            ctypes.c_int(num_clang_args),       # num_command_line_args
+            None,                               # unsaved_files
+            ctypes.c_int(0),                    # num_unsaved_files
+            ctypes.c_uint(0),                   # options
+        )
+
+
+@dataclass(frozen=True)
+class LibclangDatabase:
+    known_objects: OrderedDict  # [PythonTypeName, LibclangNativeObjectDescriptor]
+
+    @classmethod
+    def from_file(cls) -> 'LibclangDatabase':
         raise NotImplementedError
