@@ -18,10 +18,18 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from queue import Queue
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 _SIZE_BYTES_LONG = 8
+
+
+def _pack_n_longs(*longs: Tuple[int, ...]) -> bytes:
+    return struct.pack('l' * len(longs), *longs)
+
+
+def _unpack_n_longs(file_handle, n: int) -> Tuple[int, ...]:
+    return struct.unpack('l' * n, file_handle.read(_SIZE_BYTES_LONG * n))
 
 
 @dataclass(frozen=True)
@@ -45,15 +53,21 @@ class DumpRelocationEntry:
         return list(gc.get_referents(self.source_object))
 
     def as_relocation_entry(self) -> bytes:
-        num_refs = len(self.referents)
-        ref_ids = [id(obj) for obj in self.referents]
-        return struct.pack(
-            'llll' + ('l' * num_refs),
-            self.volatile_memory_id, self.base_offset, self.extent, num_refs,
-            *ref_ids)
+        return _pack_n_longs(
+            self.volatile_memory_id, self.base_offset, self.extent, len(self.referents),
+            *[id(obj) for obj in self.referents])
 
     def as_relocatable_bytes(self) -> bytes:
         return gc.pdmp_write_relocatable_object(self.source_object, self.extent)
+
+
+@dataclass(frozen=True)
+class LoadRelocationEntry:
+    original_volatile_memory_id: int
+    base_offset: int
+    extent: int
+    referents: List[int]
+    source_object: Any
 
 
 class Obarray:
@@ -99,29 +113,45 @@ class pdmp:
 
     def load(self) -> Any:
         assert self.is_mapped(), f'pdmp object {self=} was not mapped when attempting to load root object!'
+
         self.mmap.seek(0)
+        (num_objects_dumped,) = _unpack_n_longs(self.mmap, 1)
 
-        num_objects_dumped, = struct.unpack('l', self.mmap.read(_SIZE_BYTES_LONG))
-
+        relocation_info_tuples = []
         for _ in range(num_objects_dumped):
-            offset, extent = struct.unpack('ll', self.mmap.read(_SIZE_BYTES_LONG * 2))
-            # TODO: when reading out each entry, it should also contain locators for the list of
-            # entries that *should* be returned by gc.get_referents(obj) for each obj returned by
-            # this load()!
-            # TODO: We should then overwrite `Py_TYPE(obj)->tp_traverse` on every loaded object so
-            # that it specifically traverses over the other located entries within the mmaped
-            # region.
+            volatile_memory_id, offset, extent, num_refs = _unpack_n_longs(self.mmap, 4)
+            referents = _unpack_n_longs(self.mmap, num_refs)
+            relocation_info_tuples.append((
+                volatile_memory_id, offset, extent, num_refs, list(referents),
+            ))
 
         end_of_entries_offset = self.mmap.tell()
 
+        relocation_entries: List[LoadRelocationEntry] = []
+        for volatile_memory_id, offset, extent, num_refs, referents in relocation_info_tuples:
+            stored_object_location = end_of_entries_offset + offset
+            ### READ OBJECT FROM RAW MEMORY!!! UNSAFE!!!! ###
+            import pdb; pdb.set_trace()
+            # FIXME: currently fails with "bus error: python.exe" (probably a segfault)!
+            stored_object = self.mmap.read_object_at(stored_object_location)
+            entry = LoadRelocationEntry(
+                original_volatile_memory_id=volatile_memory_id,
+                base_offset=offset,
+                extent=extent,
+                referents=list(referents),
+                source_object=stored_object,
+            )
+            relocation_entries.append(entry)
+
+        return relocation_entries
+
     def __enter__(self) -> Any:
         # Get a read lock on the current file.
-        fnctl.flock(self.fd, fcntl.LOCK_SH)
+        fcntl.flock(self.fd, fcntl.LOCK_SH)
 
-        flags = mmap.MAP_FILE | mmap.MAP_SHARED
+        flags = mmap.MAP_SHARED
         prot = mmap.PROT_READ
-        access = mmap.ACCESS_READ
-        self.mmap = mmap.mmap(self.fd, self.mapped_memory_length, flags, prot, access)
+        self.mmap = mmap.mmap(self.fd, self.mapped_memory_length, flags, prot)
         assert self.is_mapped()
         return self
 

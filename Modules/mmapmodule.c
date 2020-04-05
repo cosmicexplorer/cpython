@@ -256,7 +256,7 @@ mmap_read_line_method(mmap_object *self,
 PyDoc_STRVAR(mmap_read_object_at_doc,
 "read_object_at(pos)\n"
 "\n"
-"Read a PyObject* from the position in the mapping.")
+"Read a PyObject* from the position in the mapping.");
 
 static PyObject *mmap_read_object_at(mmap_object *self, PyObject *args) {
     CHECK_VALID(NULL);
@@ -264,7 +264,7 @@ static PyObject *mmap_read_object_at(mmap_object *self, PyObject *args) {
     if (!PyArg_ParseTuple(args, "|O&:read", _Py_convert_optional_to_ssize_t, &pos)) {
         return(NULL);
     }
-    return &self->data[pos];
+    return (PyObject*)&self->data[pos];
 }
 
 static PyObject *
