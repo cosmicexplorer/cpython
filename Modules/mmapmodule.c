@@ -253,6 +253,20 @@ mmap_read_line_method(mmap_object *self,
     return result;
 }
 
+PyDoc_STRVAR(mmap_read_object_at_doc,
+"read_object_at(pos)\n"
+"\n"
+"Read a PyObject* from the position in the mapping.")
+
+static PyObject *mmap_read_object_at(mmap_object *self, PyObject *args) {
+    CHECK_VALID(NULL);
+    Py_ssize_t pos = PY_SSIZE_T_MAX;
+    if (!PyArg_ParseTuple(args, "|O&:read", _Py_convert_optional_to_ssize_t, &pos)) {
+        return(NULL);
+    }
+    return &self->data[pos];
+}
+
 static PyObject *
 mmap_read_method(mmap_object *self,
                  PyObject *args)
@@ -803,6 +817,7 @@ static struct PyMethodDef mmap_object_methods[] = {
 #endif
     {"move",            (PyCFunction) mmap_move_method,         METH_VARARGS},
     {"read",            (PyCFunction) mmap_read_method,         METH_VARARGS},
+    {"read_object_at",  (PyCFunction) mmap_read_object_at,      METH_VARARGS, mmap_read_object_at_doc},
     {"read_byte",       (PyCFunction) mmap_read_byte_method,    METH_NOARGS},
     {"readline",        (PyCFunction) mmap_read_line_method,    METH_NOARGS},
     {"resize",          (PyCFunction) mmap_resize_method,       METH_VARARGS},
