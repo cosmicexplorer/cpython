@@ -5,11 +5,10 @@
     Methods that allow interacting with a `pdmp` type.
 """
 
-import ctypes
 import gc
 import mmap
 import os
-import pickle
+import re
 import struct
 import sys
 from collections import OrderedDict
@@ -246,36 +245,108 @@ class pdmp:
         return dump_entries
 
 
-@dataclass(frozen=True)
-class PythonTypeName:
-    name: str
+class Spellable(object):
+
+    @property
+    def spelling(self) -> str:
+        return self._name
 
 
 @dataclass(frozen=True)
-class NativeTypeName:
-    name: str
+class PythonTypeName(Spellable):
+    _name: str
 
 
 @dataclass(frozen=True)
-class FieldName:
-    name: str
+class NativeTypeName(Spellable):
+    _name: str
 
 
-class ObjectType(Enum):
+@dataclass(frozen=True)
+class FieldName(Spellable):
+    _name: str
+
+
+class FieldType(Enum):
     plain_old_data = 'plain-old-data'
     pointer = 'pointer'
+    array = 'array'
+    function_pointer = 'function-pointer'
+
+
+@dataclass(frozen=True)
+class FieldOffset:
+    _offset: int
+
+    def as_offset_in_bits(self) -> int:
+        return self._offset
+
+
+@dataclass(frozen=True)
+class RecordSize:
+    _size: int
+
+    def as_size_in_bits(self) -> int:
+        return self._size
+
+
+@dataclass(frozen=True)
+class IntrusiveLength:
+    """Length which may be allocate as a fixed-size array in a field of a struct.
+
+    (e.g.) the PySetObject's `.smalltable` field allocates some stack space for things, with a
+    statically-known length. The `.table` field is then set to point to `.smalltable` for small
+    sets.
+    However, in PyBytesObject, `.ob_sval[1]` will always be pointing to something with
+    `.ob_size` elements. So we will want to look that one up in the allocation database we build
+    in `pymalloc_alloc` first, before assuming it's just size 1, for example.
+    """
+    length: int
 
 
 @dataclass(frozen=True)
 class ObjectField:
-    object_type: ObjectType
-    # (e.g.) the PySetObject's `.smalltable` field allocates some stack space for things, with a
-    # statically-known length. The `.table` field is then set to point to `.smalltable` for small
-    # sets.
-    # However, in PyBytesObject, `.ob_sval[1]` will always be pointing to something with
-    # `.ob_size` elements. So we will want to look that one up in the allocation database we build
-    # in `pymalloc_alloc` first, before assuming it's just size 1, for example.
-    intrusive_length_hint: Optional[int]
+    field_name: FieldName
+    object_type: FieldType
+    type_name: NativeTypeName
+    offset: FieldOffset
+    record_size: Optional[RecordSize]
+    intrusive_length_hint: Optional[IntrusiveLength]
+
+    @classmethod
+    def from_json(cls, input_json: Dict[str, Any]) -> 'ObjectField':
+        field_name = FieldName(input_json['field_name'])
+
+        if input_json['is_array']:
+            object_type = FieldType.array
+        elif input_json['is_function_pointer']:
+            object_type = FieldType.function_pointer
+        elif input_json['is_pointer']:
+            object_type = FieldType.pointer
+        else:
+            object_type = FieldType.plain_old_data
+
+        intrusive_length_hint = IntrusiveLength(input_json['array_size_hint']) if object_type == FieldType.array else None
+
+        if object_type == FieldType.function_pointer:
+            type_name = NativeTypeName(input_json['type_name'])
+            record_size = None
+        else:
+            # FIXME: HACK! this is in case any struct prefixes leak over from
+            # print-python-objects.py!!
+            type_name = NativeTypeName(re.sub(r'^struct ', '', input_json['scrubbed_type_name']))
+            record_size = RecordSize(input_json['non_pointer_record_size'])
+
+        offset = FieldOffset(input_json['offset'])
+
+        return cls(
+            field_name=field_name,
+            object_type=object_type,
+            type_name=type_name,
+            offset=offset,
+            record_size=record_size,
+            intrusive_length_hint=intrusive_length_hint,
+        )
 
 
 @dataclass(frozen=True)
@@ -284,78 +355,39 @@ class LibclangNativeObjectDescriptor:
     fields: OrderedDict  # [FieldName, ObjectField]
 
     @classmethod
-    def from_object(cls, source_object: Any) -> 'LibclangNativeObjectDescriptor':
-        raise NotImplementedError
-
-
-@dataclass(frozen=True)
-class LibclangHandle:
-    lib: ctypes.CDLL
-    cpython_checkout: Path
-
-    def __post_init__(self) -> None:
-        assert self.cpython_checkout.is_absolute(), f'path to cpython checkout at {self.cpython_checkout} was not absolute!'
-
-    @cached_property
-    def cx_index(self) -> ctypes.c_void_p:
-        return self.lib.clang_createIndex(
-            ctypes.c_int(0),    # excludeDeclarationsFromPCH
-            ctypes.c_int(1),    # displayDiagnostics
-        )
-
-    @cached_property
-    def _include_dirs(self) -> List[Path]:
-        return [
-            Path('/usr/local/opt/llvm/include'),
-            Path('/usr/include'),
-            self.cpython_checkout,
-            self.cpython_checkout / 'Include',
-            self.cpython_checkout / 'Objects',
-            self.cpython_checkout / 'Python',
-            self.cpython_checkout / 'Doc' / 'includes',
-        ]
-
-    @cached_property
-    def _clang_args(self) -> List[str]:
-        return [
-            '-x', 'c',
-            *[f'-I{d}' for d in self._include_dirs]
-        ]
-
-    @classmethod
-    def _encode_path(cls, path: Path) -> ctypes.c_char_p:
-        return ctypes.c_char_p(str(path).encode('ascii'))
-
-    @cached_property
-    def _clang_args_ctypes(self):
-        ArgsType = ctypes.c_char_p * len(self._clang_args)
-        args = ArgsType(*[
-            ctypes.c_char_p(arg.encode('ascii'))
-            for arg in self._clang_args
+    def from_json(cls, input_json: Dict[str, Any]) -> 'LibclangNativeObjectDescriptor':
+        native_type_name = NativeTypeName(input_json['type_name'])
+        fields = OrderedDict([
+            (FieldName(entry['field_name']), ObjectField.from_json(entry))
+            for entry in input_json['fields']
         ])
-        return (args, len(self._clang_args))
-
-    def tu_from_source_file(self, source_file: Path):
-        assert not source_file.is_absolute(), f'C source file path must be relative to cpython checkout at {self.cpython_checkout}! was: {source_file}'
-        full_path = self.cpython_checkout / source_file
-
-        clang_args, num_clang_args = self._clang_args_ctypes
-
-        return self.lib.clang_parseTranslationUnit(
-            self.cx_index,                      # CIdx
-            self._encode_path(full_path),       # source_filename
-            clang_args,                         # command_line_args
-            ctypes.c_int(num_clang_args),       # num_command_line_args
-            None,                               # unsaved_files
-            ctypes.c_int(0),                    # num_unsaved_files
-            ctypes.c_uint(0),                   # options
-        )
+        return cls(native_type_name=native_type_name, fields=fields)
 
 
 @dataclass(frozen=True)
 class LibclangDatabase:
-    known_objects: OrderedDict  # [PythonTypeName, LibclangNativeObjectDescriptor]
+    ob_type_offset: int
+    tp_name_offset: int
+    struct_field_mapping: Dict[NativeTypeName, LibclangNativeObjectDescriptor]
+    py_object_mapping: Dict[PythonTypeName, NativeTypeName]
 
     @classmethod
-    def from_file(cls) -> 'LibclangDatabase':
-        raise NotImplementedError
+    def from_json(cls, input_json: Dict[str, Any]) -> 'LibclangDatabase':
+        ob_type_offset = input_json['ob_type_offset']
+        tp_name_offset = input_json['tp_name_offset']
+
+        struct_field_mapping = {
+            NativeTypeName(name): LibclangNativeObjectDescriptor.from_json(entry)
+            for name, entry in input_json['struct_field_mapping'].items()
+        }
+        py_object_mapping = {
+            PythonTypeName(python_name): NativeTypeName(entry['py_object_struct_name'])
+            for python_name, entry in input_json['py_object_mapping'].items()
+        }
+
+        return cls(
+            ob_type_offset=ob_type_offset,
+            tp_name_offset=tp_name_offset,
+            struct_field_mapping=struct_field_mapping,
+            py_object_mapping=py_object_mapping,
+        )

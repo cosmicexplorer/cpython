@@ -5,6 +5,7 @@ import re
 import sys
 from collections import OrderedDict
 from dataclasses import dataclass
+from multiprocessing.pool import Pool
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -15,6 +16,10 @@ def _maybe_typedef_underlying(cursor: clang.Cursor) -> clang.Type:
     if cursor.kind == clang.CursorKind.TYPEDEF_DECL:
         return cursor.underlying_typedef_type
     return cursor.type
+
+
+def _scrub_struct_prefix(s: str) -> str:
+    return re.sub(r'^struct ', '', s)
 
 
 @dataclass(frozen=True)
@@ -72,15 +77,28 @@ class StructFieldsEntry:
         non_pointer_decl = non_pointer_type.get_declaration()
         non_pointer_type = _maybe_typedef_underlying(non_pointer_decl)
 
-        if (not is_function_pointer) and (not is_array):
-            non_pointer_record_size = non_pointer_type.get_size()
-            non_pointer_type_name = non_pointer_type.spelling
-
-        type_name = clang_type.spelling
+        type_name = _scrub_struct_prefix(clang_type.spelling)
         scrubbed_type_name = type_name
         if is_array:
-             scrubbed_type_name = re.sub(r'\[[0-9]*\].*$', '*', type_name)
-             assert scrubbed_type_name != type_name
+            # An intrusive array will look like `setentry [8]` or `setentry []`. We erase that here
+            # and pretend it's just a pointer. The `array_size_hint` will preserve that original
+            # information in our output.
+            scrubbed_type_name = re.sub(r'\[[0-9]*\].*$', '*', type_name)
+            assert scrubbed_type_name != type_name
+
+        if is_pointer:
+            if not is_function_pointer:
+                if is_array:
+                    non_pointer_record_size = clang_type.get_size()
+                else:
+                    non_pointer_record_size = non_pointer_type.get_size()
+        else:
+            non_pointer_type_name = scrubbed_type_name
+            non_pointer_record_size = clang_type.get_size()
+
+        if non_pointer_record_size is not None:
+            # NB: convert bytes to bits!
+            non_pointer_record_size = non_pointer_record_size * 8
 
         return dict(
             field_name=field_name,
@@ -89,7 +107,6 @@ class StructFieldsEntry:
             is_pointer=is_pointer,
             is_array=is_array,
             array_size_hint=array_size_hint,
-            non_pointer_type_name=non_pointer_type_name,
             non_pointer_record_size=non_pointer_record_size,
             is_function_pointer=is_function_pointer,
             offset=offset,
@@ -110,10 +127,14 @@ class PyObjectEntry:
     python_level_name: str
     py_object_struct_name: str
 
-    def to_json(self) -> Dict[str, str]:
+    def to_json(self, *, scrub_struct_prefix=True) -> Dict[str, str]:
         return dict(
             python_level_name=self.python_level_name,
-            py_object_struct_name=self.py_object_struct_name,
+            py_object_struct_name=(
+                _scrub_struct_prefix(self.py_object_struct_name)
+                if scrub_struct_prefix else
+                self.py_object_struct_name
+            ),
         )
 
 
@@ -148,10 +169,19 @@ class CPythonKnowledge:
             ob_type_offset=self.ob_type_offset,
             tp_name_offset=self.tp_name_offset,
             struct_field_mapping={
-                entry.type_name: entry.to_json() for entry in self.struct_field_mapping
+                # NB: We "normalize" types here by removing the "struct" keyword in front. Why?
+                # Because for some structs such as `zipobject` (which is only ever defined as
+                # `typedef struct { ... } zipobject;`), the `.py_object_mapping` below will have a
+                # `struct ` in there that doesn't seem to exist in any real source file.
+                # Pretty weird!!!!
+                _scrub_struct_prefix(entry.type_name): entry.to_json()
+                for entry in self.struct_field_mapping
             },
             py_object_mapping={
-                entry.python_level_name: entry.to_json() for entry in self.py_object_mapping
+                # NB: We also "normalize" by scrubbing any `struct ` prefixes in the
+                # `.py_object_mapping` values!
+                entry.python_level_name: entry.to_json(scrub_struct_prefix=True)
+                for entry in self.py_object_mapping
             },
         )
 
@@ -268,13 +298,30 @@ index = clang.Index.create()
 
 cpython_accumulated_knowledge = FileToParse(Path('Include/Python.h')).parse(index)
 
-for d in ['Objects', 'Python', 'Modules']:
-    for src in glob.glob(f'{d}/*.c'):
-        to_parse = FileToParse(Path(src))
-        try:
-            parsed = to_parse.parse(index)
+all_files_to_parse = [
+    FileToParse(Path(src))
+    for d in ['Objects', 'Python', 'Modules']
+    for src in glob.glob(f'{d}/*.c')
+]
+
+def parse_c_source_file(to_parse: FileToParse) -> CPythonKnowledge:
+    try:
+        return to_parse.parse(index)
+    except Exception as e:
+        raise Exception(f'failed in file {src}: {e}') from e
+
+
+RUN_SERIAL = True
+
+if RUN_SERIAL:
+    for to_parse in all_files_to_parse:
+        parsed = parse_c_source_file(to_parse)
+        cpython_accumulated_knowledge = cpython_accumulated_knowledge.merge(parsed)
+else:
+    with Pool(processes=6) as pool:
+        # FIXME: hangs for some reason??? If there's an exclusive lock on the dylib, I can see why
+        # this would be pessimal.
+        for parsed in pool.imap_unordered(parse_c_source_file, all_files_to_parse):
             cpython_accumulated_knowledge = cpython_accumulated_knowledge.merge(parsed)
-        except Exception as e:
-            raise Exception(f'failed in file {src}: {e}') from e
 
 sys.stdout.write(json.dumps(cpython_accumulated_knowledge.to_json()) + '\n')
