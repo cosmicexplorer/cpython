@@ -115,6 +115,7 @@ class StructFieldsEntry:
     def to_json(self) -> Dict[str, Any]:
         return dict(
             type_name=self.type_name,
+            record_size=self.type.get_size(),
             fields=[
                 self._field_json(name, clang_type, offset=self.type.get_offset(name))
                 for name, clang_type in self.fields.items()

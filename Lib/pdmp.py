@@ -37,37 +37,12 @@ class ByteConsistencyError(Exception):
 
 
 @dataclass(frozen=True)
-class RelocationTable:
-    mmap: mmap.mmap
-    end_of_entries_offset: int
-
-    def _seek_to_entry(self, entry: 'DumpRelocationEntry') -> None:
-        self.mmap.seek(self.end_of_entries_offset + entry.base_offset)
-
-    def get_relocated_bytes(self, entry: 'DumpRelocationEntry') -> bytes:
-        self._seek_to_entry(entry)
-        return self.mmap.read(entry.extent)
-
-    def set_relocated_bytes(self, entry: 'DumpRelocationEntry', new_bytes: bytes) -> None:
-        if len(new_bytes) != entry.extent:
-            raise ByteConsistencyError(f'new relocated bytes {new_bytes} must be the correct size for entry {entry} (was: {len(new_bytes)})!')
-        self._seek_to_entry(entry)
-        written = self.mmap.write(new_bytes)
-        if written != entry.extent:
-            raise ByteConsistencyError(f'wrote fewer bytes ({written}) than expected ({entry.extent}) when updating a pdmp object relocation {entry}!')
-
-
-@dataclass(frozen=True)
 class DumpRelocationEntry:
     source_object: Any
-    base_offset: int
 
     @property
     def volatile_memory_id(self) -> int:
         return id(self.source_object)
-
-    def __post_init__(self) -> None:
-        assert self.base_offset >= 0
 
     @cached_property
     def extent(self) -> int:
@@ -177,70 +152,9 @@ class pdmp:
         finally:
             mapping.close()
 
-    def _dump_volatile_memory(
-            self,
-            file_handle,
-            source_object: Any,
-    ) -> Tuple[int, bytes, List[DumpRelocationEntry]]:
-        obarray = Obarray()
-        dump_queue = Queue()
-        dump_entries: List[DumpRelocationEntry] = []
-
-        dump_queue.put(source_object)
-
-        # Get a list of all the sizes of each transitively referenced object.
-        total_offset: int = 0
-        while not dump_queue.empty():
-            obj = dump_queue.get()
-
-            # Produce a description of the object in memory.
-            entry = DumpRelocationEntry(
-                source_object=obj,
-                base_offset=total_offset,
-            )
-
-            # If the object was already seen, do not attempt to register it again.
-            if obarray.put(entry):
-                continue
-
-            # Add all objects this one references to the stack to search.
-            for ref in entry.referents:
-                dump_queue.put(ref)
-
-            # Return the list of relocation entries.
-            dump_entries.append(entry)
-
-            # Bump the offset.
-            total_offset += entry.extent
-
-        # Write entries to the pdmp file.
-        num_objects_dumped = len(dump_entries)
-        file_handle.write(_pack_n_longs(num_objects_dumped))
-
-        for entry in dump_entries:
-            file_handle.write(entry.pack_relocation_entry_bytes())
-
-        end_of_entries_offset = file_handle.tell()
-
-        for entry in dump_entries:
-            file_handle.write(entry.as_volatile_bytes())
-
-        return (end_of_entries_offset, dump_entries)
-
-    def dump(self, source_object: Any) -> List[DumpRelocationEntry]:
-        # Write entries to the file.
+    def dump(self, db: 'LibclangDatabase': source_object: Any) -> List[DumpRelocationEntry]:
         with self._acquire_write_file_handle(truncate=True) as file_handle:
-            end_of_entries_offset, dump_entries = self._dump_volatile_memory(file_handle, source_object)
-
-        with self._acquire_write_file_handle(truncate=False) as file_handle,\
-             self._open_write_mapping(file_handle.fileno()) as mapping:
-                relocation_table = RelocationTable(
-                    mmap=mapping,
-                    end_of_entries_offset=end_of_entries_offset,
-                )
-                for entry in dump_entries:
-                    relocated_bytes = relocation_table.get_relocated_bytes(entry)
-                    import pdb; pdb.set_trace()
+            dump_entries = db.dump(relocation_table, source_object)
 
         return dump_entries
 
@@ -352,16 +266,18 @@ class ObjectField:
 @dataclass(frozen=True)
 class LibclangNativeObjectDescriptor:
     native_type_name: NativeTypeName
+    record_size: RecordSize
     fields: OrderedDict  # [FieldName, ObjectField]
 
     @classmethod
     def from_json(cls, input_json: Dict[str, Any]) -> 'LibclangNativeObjectDescriptor':
         native_type_name = NativeTypeName(input_json['type_name'])
+        record_size = RecordSize(input_json['record_size'])
         fields = OrderedDict([
             (FieldName(entry['field_name']), ObjectField.from_json(entry))
             for entry in input_json['fields']
         ])
-        return cls(native_type_name=native_type_name, fields=fields)
+        return cls(native_type_name=native_type_name, record_size=record_size, fields=fields)
 
 
 @dataclass(frozen=True)
@@ -391,3 +307,6 @@ class LibclangDatabase:
             struct_field_mapping=struct_field_mapping,
             py_object_mapping=py_object_mapping,
         )
+
+    def dump(self, source_object: Any) -> List[DumpRelocationEntry]:
+        pass
