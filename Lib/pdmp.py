@@ -269,10 +269,10 @@ class ObjectType(Enum):
 @dataclass(frozen=True)
 class ObjectField:
     object_type: ObjectType
-    # the PySetObject's `.smalltable` field allocates some stack space for things, with a
+    # (e.g.) the PySetObject's `.smalltable` field allocates some stack space for things, with a
     # statically-known length. The `.table` field is then set to point to `.smalltable` for small
     # sets.
-    # However, as in PyBytesObject, `.ob_sval[1]` will always be pointing to something with
+    # However, in PyBytesObject, `.ob_sval[1]` will always be pointing to something with
     # `.ob_size` elements. So we will want to look that one up in the allocation database we build
     # in `pymalloc_alloc` first, before assuming it's just size 1, for example.
     intrusive_length_hint: Optional[int]
