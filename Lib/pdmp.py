@@ -22,6 +22,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 
 _SIZE_BYTES_LONG = 8
+_BITS_PER_BYTE = 8
 
 
 def _pack_n_longs(*longs: Tuple[int, ...]) -> bytes:
@@ -114,7 +115,7 @@ class pdmp:
         finally:
             mapping.close()
 
-    def dump(self, db: 'LibclangDatabase': source_object: Any) -> List[Any]:
+    def dump(self, db: 'LibclangDatabase', source_object: Any) -> List[Any]:
         reachable_objects = db.traverse_reachable_objects(source_object)
         return reachable_objects
 
@@ -129,6 +130,10 @@ class Spellable(object):
 @dataclass(frozen=True)
 class PythonTypeName(Spellable):
     _name: str
+
+    @classmethod
+    def from_object(cls, source_object: Any) -> 'PythonTypeName':
+        return cls(type(source_object).__name__)
 
 
 @dataclass(frozen=True)
@@ -163,13 +168,27 @@ class FieldType(Enum):
 class FieldOffset:
     _offset: int
 
+    def __post_init__(self) -> None:
+        assert isinstance(self._offset, int) and (self._offset >= 0)
+
     def as_offset_in_bits(self) -> int:
         return self._offset
+
+    @classmethod
+    def from_record_size(cls, record_size: 'RecordSize') -> 'FieldOffset':
+        return cls(record_size.as_size_in_bits())
+
+    def __mul__(self, n: int) -> 'FieldOffset':
+        assert isinstance(n, int) and n > 0
+        return type(self)(self._offset * n)
 
 
 @dataclass(frozen=True)
 class RecordSize:
     _size: int
+
+    def __post_init__(self) -> None:
+        assert isinstance(self._size, int) and self._size > 0
 
     def as_size_in_bits(self) -> int:
         return self._size
@@ -244,7 +263,7 @@ class PointerDepth:
 class LibclangNativeObjectDescriptor:
     native_type_name: NativeTypeName
     record_size: RecordSize
-    pointer_type: PointerType
+    pointer_type: 'PointerType'
     fields: OrderedDict  # [FieldName, ObjectField]
     intrusive_length_hint: Optional[IntrusiveLength]
 
@@ -261,7 +280,9 @@ class LibclangNativeObjectDescriptor:
             record_size=record_size,
             # NB: All struct types that we directly extract from libclang are non-pointer types!
             pointer_type=PointerType.non_pointer,
-            fields=fields)
+            fields=fields,
+            intrusive_length_hint=None,
+        )
 
 
 class PythonCLevelType(Enum):
@@ -324,7 +345,7 @@ class LivePythonCLevelObject:
     def from_object(
         cls,
         source_object: Any,
-        descriptor: LibclangNativeObjectDescriptor,
+        descriptor: Union[LibclangNativeObjectDescriptor, BasicCLevelTypeDescriptor],
     ) -> 'LivePythonCLevelObject':
         return cls.create(
             id=PythonCLevelPointerLocation.from_python_object(source_object),
@@ -338,7 +359,6 @@ class LivePythonCLevelObject:
         descriptor: Union[LibclangNativeObjectDescriptor, BasicCLevelTypeDescriptor],
     ) -> 'LivePythonCLevelObject':
         assert isinstance(id, PythonCLevelPointerLocation)
-        assert isinstance(record_size, RecordSize)
         object_bytes = gc.pdmp_write_relocatable_object(
             id.pointer_location,
             descriptor.record_size.as_size_in_bits(),
@@ -392,21 +412,44 @@ class LivePythonCLevelObject:
     def __hash__(self) -> int:
         return hash(self.volatile_memory_id)
 
+    @property
+    def intrusive_length_hint(self) -> Optional[IntrusiveLength]:
+        return self._descriptor.intrusive_length_hint
+
     def get_subobjects(self, db: 'LibclangDatabase') -> List['LivePythonCLevelObject']:
         if self.pointer_type == PointerType.function_pointer:
             return []
 
         if self.pointer_type == PointerType.pointer:
-            # TODO: incorporate array size hint / dynamic allocation info from pymalloc_alloc to
-            # know how many values to return here!!!
+            assert self.record_size is not None
+
+            allocation_size = db.allocation_report.records.get(self.volatile_memory_id, None)
+            if allocation_size is None:
+                # If we can't find the allocation, we assume it's intrusive. We require that the
+                # intrusive size hint was provided.
+                assert self.intrusive_length_hint is not None
+                num_allocations = self.intrusive_length_hint
+            else:
+                num_allocations = allocation_size // self.record_size.as_size_in_bits()
+                assert (allocation_size == 1) or (allocation_size % self.record_size.as_size_in_bits() == 0)
+
+            assert num_allocations > 0
+
             new_descriptor = dataclasses.replace(
                 self._descriptor,
                 native_type_name=self._descriptor.native_type_name.dereference_one_pointer_level(),
             )
-            return [type(self).create(
-                id=PythonCLevelPointerLocation.from_bytes(self.get_bytes()),
-                descriptor=new_descriptor,
-            )]
+            base_pointer = PythonCLevelPointerLocation.from_bytes(self.get_bytes())
+
+            sub_pointers = [
+                type(self).create(
+                    id=(base_pointer + (FieldOffset.from_record_size(self.record_size) * (cur_element_index + 1))),
+                    descriptor=new_descriptor,
+                )
+                for cur_element_index in range(num_allocations)
+            ]
+
+            return sub_pointers
 
         assert self.pointer_type == PointerType.non_pointer
         if self._type_type == PythonCLevelType.non_struct:
@@ -414,7 +457,7 @@ class LivePythonCLevelObject:
         assert self._type_type == PythonCLevelType.struct
 
         sub_objects = []
-        for field in self._struct_type_descriptor.values():
+        for field in self._struct_type_descriptor.fields.values():
             descriptor = db.struct_field_mapping.get(field.type_name, None)
             if not descriptor:
                 # A struct definition was not found, so this is a "basic" type.
@@ -446,6 +489,46 @@ class Obarray:
 
 
 @dataclass(frozen=True)
+class AllocationSize:
+    _size: int
+
+    def as_size_in_bits(self) -> int:
+        return self._size
+
+
+@dataclass(frozen=True)
+class RawAllocationReport:
+    records: Dict[PythonCLevelPointerLocation, AllocationSize]
+
+    @classmethod
+    def get_current_report(cls, db: 'LibclangDatabase') -> 'RawAllocationReport':
+        all_allocations_report_bytes = gc.pdmp_write_allocation_report()
+
+        report_size = db.all_allocations_report_struct.record_size
+        assert report_size == len(all_allocations_report_bytes)
+        (all_allocations_pointer, num_allocations) = struct.unpack(
+            'PN',
+            all_allocations_report_bytes)
+
+        single_record_size = db.allocation_record_struct.record_size
+        all_allocations_all_bytes = gc.pdmp_write_relocatable_object(
+            all_allocations_pointer,
+            num_allocations * single_record_size.as_size_in_bits())
+
+        records: Dict[PythonCLevelPointerLocation, AllocationSize] = {}
+        for cur_record_index in range(0, num_allocations):
+            cur_offset = cur_record_index * single_record_size
+            cur_record_bytes = all_allocations_all_bytes[cur_offset:(cur_offset + single_record_size)]
+            cur_pointer, cur_nbytes = struct.unpack(
+                'PN',
+                cur_record_bytes)
+            records[PythonCLevelPointerLocation(cur_pointer)] = AllocationSize(cur_nbytes)
+
+        return cls(records)
+
+
+
+@dataclass(frozen=True)
 class LibclangDatabase:
     ob_type_offset: int
     tp_name_offset: int
@@ -473,6 +556,18 @@ class LibclangDatabase:
             py_object_mapping=py_object_mapping,
         )
 
+    @cached_property
+    def all_allocations_report_struct(self) -> LibclangNativeObjectDescriptor:
+        return self.struct_field_mapping[NativeTypeName('all_allocations_report')]
+
+    @cached_property
+    def allocation_record_struct(self) -> LibclangNativeObjectDescriptor:
+        return self.struct_field_mapping[NativeTypeName('allocation_record')]
+
+    @cached_property
+    def allocation_report(self) -> RawAllocationReport:
+        return RawAllocationReport.get_current_report(self)
+
     class InvalidSourceObjectError(Exception):
         pass
 
@@ -480,13 +575,20 @@ class LibclangDatabase:
         obarray = Obarray()
         stack = []
 
-        py_type_name = type(source_object).__name__
+        py_type_name = PythonTypeName.from_object(source_object)
         # Get the libclang description of the C struct representing the object.
         try:
-            py_struct_type = self.py_object_mapping[py_type_name]
+            py_struct_name = self.py_object_mapping[py_type_name]
         except KeyError as e:
             raise self.InvalidSourceObjectError(
                 f'failed to locate libclang entry for {py_type_name}'
+            ) from e
+
+        try:
+            py_struct_type = self.struct_field_mapping[py_struct_name]
+        except KeyError as e:
+            raise self.InvalidSourceObjectError(
+                f'no support for {py_type_name} objects currently'
             ) from e
 
         live_entrypoint_object = LivePythonCLevelObject.from_object(source_object, py_struct_type)
@@ -503,6 +605,6 @@ class LibclangDatabase:
 
             reachable_objects.append(live_object)
 
-            stack.extend(live_object.get_subobjects())
+            stack.extend(live_object.get_subobjects(self))
 
         return reachable_objects

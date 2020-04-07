@@ -1,7 +1,12 @@
 #include "Python.h"
 #include "pycore_pymem.h"
 
+#include "obmalloc.h"
+
 #include <stdbool.h>
+
+
+void *record_allocation(void *pointer, size_t nbytes);
 
 
 /* Defined in tracemalloc.c */
@@ -96,7 +101,9 @@ _PyMem_RawMalloc(void *ctx, size_t size)
        To solve these problems, allocate an extra byte. */
     if (size == 0)
         size = 1;
-    return malloc(size);
+    void * result = malloc(size);
+    record_allocation(result, size);
+    return result;
 }
 
 static void *
@@ -110,7 +117,10 @@ _PyMem_RawCalloc(void *ctx, size_t nelem, size_t elsize)
         nelem = 1;
         elsize = 1;
     }
-    return calloc(nelem, elsize);
+    void * result = calloc(nelem, elsize);
+    size_t nbytes = nelem * elsize;
+    record_allocation(result, nbytes);
+    return result;
 }
 
 static void *
@@ -118,7 +128,9 @@ _PyMem_RawRealloc(void *ctx, void *ptr, size_t size)
 {
     if (size == 0)
         size = 1;
-    return realloc(ptr, size);
+    void* result = realloc(ptr, size);
+    record_allocation(result, size);
+    return result;
 }
 
 static void
@@ -165,7 +177,9 @@ _PyObject_ArenaMunmap(void *ctx, void *ptr, size_t size)
 static void *
 _PyObject_ArenaMalloc(void *ctx, size_t size)
 {
-    return malloc(size);
+    void* result = malloc(size);
+    record_allocation(result, size);
+    return result;
 }
 
 static void
@@ -719,6 +733,60 @@ PyObject_Free(void *ptr)
 #  define UNLIKELY(value) (value)
 #  define LIKELY(value) (value)
 #endif
+
+static _Py_atomic_int cur_max_allocation_records = {-1};
+static struct allocation_record* all_possible_allocations = NULL;
+static _Py_atomic_int total_num_allocations = {-1};
+
+void *record_allocation(void *pointer, size_t nbytes) {
+    /* TODO: this is so we don't overwrite all_possible_allocations if two allocations race to be
+     * the first -- does this work?? */
+    _Py_atomic_load(&cur_max_allocation_records);
+    if (UNLIKELY(all_possible_allocations == NULL)) {
+#define ALLOCATION_FACTOR 100000
+        _Py_atomic_store(&cur_max_allocation_records, ALLOCATION_FACTOR);
+        all_possible_allocations =
+            malloc(sizeof(struct allocation_record) * ALLOCATION_FACTOR);
+#undef ALLOCATION_FACTOR
+        _Py_atomic_store(&total_num_allocations, 0);
+    }
+
+    /* TODO: make sure this is consistent with _Py_memory_order_seq_cst!! */
+    int num_allocations = _Py_atomic_load(&total_num_allocations);
+    int cur_max_allocations = _Py_atomic_load(&cur_max_allocation_records);
+    if (UNLIKELY(num_allocations > cur_max_allocations)) {
+        /* Reallocate for twice the size, copying over the original elements. */
+        int new_max_allocations = cur_max_allocations * 2;
+        struct allocation_record* new_allocations = malloc(sizeof(struct allocation_record) * new_max_allocations);
+        memcpy(new_allocations, all_possible_allocations, cur_max_allocations);
+        free(all_possible_allocations);
+        all_possible_allocations = new_allocations;
+        _Py_atomic_store(&cur_max_allocation_records, new_max_allocations);
+    }
+    _Py_atomic_store(&total_num_allocations, num_allocations + 1);
+
+    struct allocation_record *cur_record =
+        &all_possible_allocations[num_allocations];
+    cur_record->pointer = pointer;
+    cur_record->nbytes = nbytes;
+
+    return pointer;
+}
+
+struct all_allocations_report report_all_allocations(void) {
+    int num_allocations = _Py_atomic_load(&total_num_allocations);
+    struct allocation_record* all_allocations = malloc(sizeof(struct allocation_record) * num_allocations);
+    memcpy(all_allocations, all_possible_allocations, num_allocations);
+    /* TODO: this is intended to ensure consistency of memcpy. No clue whether it'll work. */
+    _Py_atomic_store(&total_num_allocations, num_allocations);
+    struct all_allocations_report report = {.all_allocations = all_allocations,
+                                            .num_allocations = num_allocations};
+    return report;
+}
+
+void free_all_allocations_report(struct all_allocations_report *report) {
+    free(report->all_allocations);
+}
 
 #ifdef WITH_PYMALLOC
 
@@ -1586,10 +1654,8 @@ allocate_from_new_pool(uint size)
    requests, on error in the code below (as a last chance to serve the request)
    or when the max memory limit has been reached.
 */
-static inline void*
-pymalloc_alloc(void *ctx, size_t nbytes)
-{
-    /* TODO: add some logic here to record how large the allocation was! */
+static inline void *
+pymalloc_alloc(void *ctx, size_t nbytes) {
 #ifdef WITH_VALGRIND
     if (UNLIKELY(running_on_valgrind == -1)) {
         running_on_valgrind = RUNNING_ON_VALGRIND;
@@ -1633,7 +1699,6 @@ pymalloc_alloc(void *ctx, size_t nbytes)
 
     return (void *)bp;
 }
-
 
 static void *
 _PyObject_Malloc(void *ctx, size_t nbytes)

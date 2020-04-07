@@ -34,6 +34,8 @@
 #include "pydtrace.h"
 #include "pytime.h" /* for _PyTime_GetMonotonicClock() */
 
+#include "obmalloc.h"
+
 typedef struct _gc_runtime_state GCState;
 
 /*[clinic input]
@@ -1827,6 +1829,15 @@ static PyObject *gc_pdmp_write_relocatable_object(PyObject *module,
     return PyBytes_FromStringAndSize((const char *)source_object_location, object_size);
 }
 
+static PyObject *gc_pdmp_write_allocation_report(PyObject *module) {
+    struct all_allocations_report report = report_all_allocations();
+    PyObject* result = PyBytes_FromStringAndSize((const char *)report.all_allocations,
+                                                 (sizeof(struct allocation_record) * report.num_allocations));
+    /* FIXME: we are now leaking!!!!! */
+    /* free_all_allocations_report(&report); */
+    return result;
+}
+
 PyDoc_STRVAR(
     gc__doc__,
     "This module provides access to the garbage collector for reference "
@@ -1869,6 +1880,7 @@ static PyMethodDef GcMethods[] = {
     {"pdmp_write_relocatable_object",
      (PyCFunction)gc_pdmp_write_relocatable_object, METH_VARARGS,
      gc_pdmp_write_relocatable_object_doc},
+    {"pdmp_write_allocation_report", (PyCFunction)gc_pdmp_write_allocation_report, METH_NOARGS, "???"},
     {NULL, NULL} /* Sentinel */
 };
 
