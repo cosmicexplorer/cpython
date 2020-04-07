@@ -22,10 +22,19 @@ def _scrub_struct_prefix(s: str) -> str:
     return re.sub(r'^struct ', '', s)
 
 
+def _get_non_pointer_type(ty: clang.Type) -> clang.Type:
+    prev = ty
+    cur = prev
+    while not cur.kind == clang.TypeKind.INVALID:
+        prev = cur
+        cur = cur.get_pointee()
+    return prev
+
+
 @dataclass(frozen=True)
 class StructFieldsEntry:
     decl: clang.Cursor
-    fields: OrderedDict  # [str, clang.Type]
+    fields: OrderedDict  # [str, Tuple[clang.Type, clang.Type]]
 
     def __post_init__(self) -> None:
         assert self.decl.kind == clang.CursorKind.STRUCT_DECL
@@ -35,8 +44,12 @@ class StructFieldsEntry:
         return self.decl.type
 
     @property
+    def record_size(self) -> int:
+        return self.type.get_size()
+
+    @property
     def type_name(self) -> str:
-        return self.type.spelling
+        return _scrub_struct_prefix(self.type.spelling)
 
     _pointer_types = [clang.TypeKind.POINTER]
     _array_types = [
@@ -52,6 +65,7 @@ class StructFieldsEntry:
             cls,
             field_name: str,
             clang_type: clang.Type,
+            non_pointer_type: clang.Type,
             offset: int,
     ) -> Tuple[bool, Optional[int]]:
         is_pointer = False
@@ -66,16 +80,19 @@ class StructFieldsEntry:
             is_array = True
             array_size_hint = clang_type.get_array_size()
 
-        non_pointer_type = clang_type
-        non_pointer_record_size: Optional[int] = None
-        non_pointer_type_name: Optional[str] = None
+        non_pointer_decl = non_pointer_type.get_declaration()
+        non_pointer_type = _maybe_typedef_underlying(non_pointer_decl)
+
+        non_pointer_record_size = non_pointer_type.get_size()
+        if non_pointer_record_size < 0:
+            non_pointer_record_size = None
+        non_pointer_type_name = _scrub_struct_prefix(non_pointer_type.spelling)
+
         if is_pointer:
             non_pointer_type = clang_type.get_pointee()
 
             if non_pointer_type.kind in cls._func_types:
                 is_function_pointer = True
-        non_pointer_decl = non_pointer_type.get_declaration()
-        non_pointer_type = _maybe_typedef_underlying(non_pointer_decl)
 
         type_name = _scrub_struct_prefix(clang_type.spelling)
         scrubbed_type_name = type_name
@@ -86,16 +103,6 @@ class StructFieldsEntry:
             scrubbed_type_name = re.sub(r'\[[0-9]*\].*$', '*', type_name)
             assert scrubbed_type_name != type_name
 
-        if is_pointer:
-            if not is_function_pointer:
-                if is_array:
-                    non_pointer_record_size = clang_type.get_size()
-                else:
-                    non_pointer_record_size = non_pointer_type.get_size()
-        else:
-            non_pointer_type_name = scrubbed_type_name
-            non_pointer_record_size = clang_type.get_size()
-
         if non_pointer_record_size is not None:
             # NB: convert bytes to bits!
             non_pointer_record_size = non_pointer_record_size * 8
@@ -104,6 +111,7 @@ class StructFieldsEntry:
             field_name=field_name,
             type_name=type_name,
             scrubbed_type_name=scrubbed_type_name,
+            non_pointer_type_name=non_pointer_type_name,
             is_pointer=is_pointer,
             is_array=is_array,
             array_size_hint=array_size_hint,
@@ -115,10 +123,13 @@ class StructFieldsEntry:
     def to_json(self) -> Dict[str, Any]:
         return dict(
             type_name=self.type_name,
-            record_size=self.type.get_size(),
+            record_size=self.record_size,
             fields=[
-                self._field_json(name, clang_type, offset=self.type.get_offset(name))
-                for name, clang_type in self.fields.items()
+                self._field_json(name,
+                                 clang_type=clang_type,
+                                 non_pointer_type=non_pointer_type,
+                                 offset=self.type.get_offset(name))
+                for name, (clang_type, non_pointer_type) in self.fields.items()
             ],
         )
 
@@ -175,8 +186,9 @@ class CPythonKnowledge:
                 # `typedef struct { ... } zipobject;`), the `.py_object_mapping` below will have a
                 # `struct ` in there that doesn't seem to exist in any real source file.
                 # Pretty weird!!!!
-                _scrub_struct_prefix(entry.type_name): entry.to_json()
+                entry.type_name: entry.to_json()
                 for entry in self.struct_field_mapping
+                if entry.record_size > 0
             },
             py_object_mapping={
                 # NB: We also "normalize" by scrubbing any `struct ` prefixes in the
@@ -228,14 +240,17 @@ class FileToParse:
                 # if struct_type.spelling == 'PySetObject':
                 #     import pdb; pdb.set_trace()
 
-                fields: List[Tuple[str, clang.Type]] = []
+                fields: List[Tuple[str, Tuple[clang.Type, clang.Type]]] = []
                 for field in struct_type.get_fields():
-                    field_target_type = field.type
-                    type_decl_for_field = field_target_type.get_declaration()
+                    non_pointer_target_type = _get_non_pointer_type(field.type)
+
+                    type_decl_for_field = field.type.get_declaration()
                     if type_decl_for_field.kind == clang.CursorKind.TYPEDEF_DECL:
                         field_target_type = type_decl_for_field.underlying_typedef_type
+                    else:
+                        field_target_type = field.type
 
-                    fields.append((field.spelling, field_target_type))
+                    fields.append((field.spelling, (field_target_type, non_pointer_target_type)))
 
                     # Check for PyObject_HEAD.
                     # NB: We intentionally access `field.type`, NOT `field_target_type`, because we want to
@@ -298,6 +313,8 @@ index = clang.Index.create()
 
 
 cpython_accumulated_knowledge = FileToParse(Path('Include/Python.h')).parse(index)
+
+# cpython_accumulated_knowledge = cpython_accumulated_knowledge.merge(FileToParse(Path('Include/cpython/object.h')).parse(index))
 
 all_files_to_parse = [
     FileToParse(Path(src))

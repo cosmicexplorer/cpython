@@ -34,6 +34,7 @@
 #include "pydtrace.h"
 #include "pytime.h" /* for _PyTime_GetMonotonicClock() */
 
+#include "Objects/dict-common.h"
 #include "obmalloc.h"
 
 typedef struct _gc_runtime_state GCState;
@@ -1829,6 +1830,10 @@ static PyObject *gc_pdmp_write_relocatable_object(PyObject *module,
     return PyBytes_FromStringAndSize((const char *)source_object_location, object_size);
 }
 
+static PyObject *gc_pdmp_write_empty_keys_struct_location(PyObject* module) {
+    return PyLong_FromVoidPtr(&empty_keys_struct);
+}
+
 static PyObject *gc_pdmp_write_allocation_report(PyObject *module) {
     struct all_allocations_report report = report_all_allocations();
     PyObject* result = PyBytes_FromStringAndSize((const char *)report.all_allocations,
@@ -1881,6 +1886,7 @@ static PyMethodDef GcMethods[] = {
      (PyCFunction)gc_pdmp_write_relocatable_object, METH_VARARGS,
      gc_pdmp_write_relocatable_object_doc},
     {"pdmp_write_allocation_report", (PyCFunction)gc_pdmp_write_allocation_report, METH_NOARGS, "???"},
+    {"pdmp_write_empty_keys_struct_location", (PyCFunction)gc_pdmp_write_empty_keys_struct_location, METH_NOARGS, "???"},
     {NULL, NULL} /* Sentinel */
 };
 
@@ -2103,7 +2109,8 @@ static PyObject *_PyObject_GC_Alloc(int use_calloc, size_t basicsize) {
         gcstate->collecting = 0;
     }
     PyObject *op = FROM_GC(g);
-    return op;
+
+    return record_allocation(op, basicsize);
 }
 
 PyObject *_PyObject_GC_Malloc(size_t basicsize) {

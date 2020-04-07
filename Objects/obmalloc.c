@@ -6,9 +6,6 @@
 #include <stdbool.h>
 
 
-void *record_allocation(void *pointer, size_t nbytes);
-
-
 /* Defined in tracemalloc.c */
 extern void _PyMem_DumpTraceback(int fd, const void *ptr);
 
@@ -1697,7 +1694,7 @@ pymalloc_alloc(void *ctx, size_t nbytes) {
         bp = allocate_from_new_pool(size);
     }
 
-    return (void *)bp;
+    return record_allocation((void *)bp, size);
 }
 
 static void *

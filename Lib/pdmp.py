@@ -7,6 +7,7 @@
 
 import dataclasses
 import gc
+import logging
 import mmap
 import os
 import re
@@ -19,6 +20,9 @@ from enum import Enum
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+
+
+logger = logging.getLogger(__name__)
 
 
 _SIZE_BYTES_LONG = 8
@@ -169,7 +173,7 @@ class FieldOffset:
     _offset: int
 
     def __post_init__(self) -> None:
-        assert isinstance(self._offset, int) and (self._offset >= 0)
+        assert isinstance(self._offset, int) and (self._offset >= 0), f'bad offset was: {self._offset}'
 
     def as_offset_in_bits(self) -> int:
         return self._offset
@@ -186,6 +190,15 @@ class FieldOffset:
 @dataclass(frozen=True)
 class RecordSize:
     _size: int
+
+    @classmethod
+    def from_json(cls, json_int: Optional[int]) -> Optional['RecordSize']:
+        if json_int is None:
+            return None
+        assert isinstance(json_int, int), f'{json_int=} was not int'
+        if json_int <= 0:
+            return None
+        return cls(json_int)
 
     def __post_init__(self) -> None:
         assert isinstance(self._size, int) and self._size > 0
@@ -213,6 +226,7 @@ class ObjectField:
     field_name: FieldName
     object_type: FieldType
     type_name: NativeTypeName
+    non_pointer_type_name: NativeTypeName
     offset: FieldOffset
     record_size: Optional[RecordSize]
     intrusive_length_hint: Optional[IntrusiveLength]
@@ -239,14 +253,18 @@ class ObjectField:
             # FIXME: HACK! this is in case any struct prefixes leak over from
             # print-python-objects.py!!
             type_name = NativeTypeName(re.sub(r'^struct ', '', input_json['scrubbed_type_name']))
-            record_size = RecordSize(input_json['non_pointer_record_size'])
+            record_size = RecordSize.from_json(input_json['non_pointer_record_size'])
 
-        offset = FieldOffset(input_json['offset'])
+        try:
+            offset = FieldOffset(input_json['offset'])
+        except AssertionError as e:
+            raise AssertionError(f'failed parsing {input_json=}: {e}') from e
 
         return cls(
             field_name=field_name,
             object_type=object_type,
             type_name=type_name,
+            non_pointer_type_name=NativeTypeName(input_json['non_pointer_type_name']),
             offset=offset,
             record_size=record_size,
             intrusive_length_hint=intrusive_length_hint,
@@ -257,6 +275,9 @@ class ObjectField:
 class PointerDepth:
     """The number of *s in the type name."""
     depth: int
+
+    def __post_init__(self) -> None:
+        assert isinstance(self.depth, int) and (self.depth >= 0)
 
 
 @dataclass(frozen=True)
@@ -269,12 +290,16 @@ class LibclangNativeObjectDescriptor:
 
     @classmethod
     def from_json(cls, input_json: Dict[str, Any]) -> 'LibclangNativeObjectDescriptor':
-        native_type_name = NativeTypeName(input_json['type_name'])
-        record_size = RecordSize(input_json['record_size'])
-        fields = OrderedDict([
-            (FieldName(entry['field_name']), ObjectField.from_json(entry))
-            for entry in input_json['fields']
-        ])
+        try:
+            native_type_name = NativeTypeName(input_json['type_name'])
+            record_size = RecordSize.from_json(input_json['record_size'])
+            fields = OrderedDict([
+                (FieldName(entry['field_name']), ObjectField.from_json(entry))
+                for entry in input_json['fields']
+            ])
+        except AssertionError as e:
+            raise AssertionError(f'failed parsing {input_json=}: {e}') from e
+
         return cls(
             native_type_name=native_type_name,
             record_size=record_size,
@@ -359,10 +384,13 @@ class LivePythonCLevelObject:
         descriptor: Union[LibclangNativeObjectDescriptor, BasicCLevelTypeDescriptor],
     ) -> 'LivePythonCLevelObject':
         assert isinstance(id, PythonCLevelPointerLocation)
-        object_bytes = gc.pdmp_write_relocatable_object(
-            id.pointer_location,
-            descriptor.record_size.as_size_in_bits(),
-        )
+        try:
+            object_bytes = gc.pdmp_write_relocatable_object(
+                id.pointer_location,
+                descriptor.record_size.as_size_in_bits(),
+            )
+        except AttributeError as e:
+            raise AttributeError(f'failed to use {descriptor=}: {e}') from e
 
         if isinstance(descriptor, LibclangNativeObjectDescriptor):
             type_type = PythonCLevelType.struct
@@ -388,6 +416,10 @@ class LivePythonCLevelObject:
         if self._type_type == PythonCLevelType.struct:
             return self._struct_type_descriptor
         return self._non_struct_type_descriptor
+
+    @property
+    def record_size(self) -> Optional[RecordSize]:
+        return self._descriptor.record_size
 
     @property
     def pointer_type(self) -> PointerType:
@@ -423,27 +455,38 @@ class LivePythonCLevelObject:
         if self.pointer_type == PointerType.pointer:
             assert self.record_size is not None
 
-            allocation_size = db.allocation_report.records.get(self.volatile_memory_id, None)
+            if self.pointer_depth.depth == 1:
+                cur_record_size = self.record_size
+                assert cur_record_size is not None
+            else:
+                assert self.pointer_depth.depth > 0
+                # Pointers are 64 bits long!
+                cur_record_size = RecordSize(64)
+
+            allocation_size = db.allocation_report.get(self.volatile_memory_id)
             if allocation_size is None:
                 # If we can't find the allocation, we assume it's intrusive. We require that the
                 # intrusive size hint was provided.
+                if self.intrusive_length_hint is None:
+                    import pdb; pdb.set_trace()
                 assert self.intrusive_length_hint is not None
                 num_allocations = self.intrusive_length_hint
             else:
-                num_allocations = allocation_size // self.record_size.as_size_in_bits()
-                assert (allocation_size == 1) or (allocation_size % self.record_size.as_size_in_bits() == 0)
+                num_allocations = allocation_size // cur_record_size.as_size_in_bits()
+                assert (allocation_size == 1) or (allocation_size % cur_record_size.as_size_in_bits() == 0)
 
             assert num_allocations > 0
 
             new_descriptor = dataclasses.replace(
                 self._descriptor,
                 native_type_name=self._descriptor.native_type_name.dereference_one_pointer_level(),
+                intrusive_length_hint=None,
             )
             base_pointer = PythonCLevelPointerLocation.from_bytes(self.get_bytes())
 
             sub_pointers = [
                 type(self).create(
-                    id=(base_pointer + (FieldOffset.from_record_size(self.record_size) * (cur_element_index + 1))),
+                    id=(base_pointer + (FieldOffset.from_record_size(cur_record_size) * cur_element_index)),
                     descriptor=new_descriptor,
                 )
                 for cur_element_index in range(num_allocations)
@@ -458,8 +501,15 @@ class LivePythonCLevelObject:
 
         sub_objects = []
         for field in self._struct_type_descriptor.fields.values():
-            descriptor = db.struct_field_mapping.get(field.type_name, None)
-            if not descriptor:
+            descriptor = db.struct_field_mapping.get(field.non_pointer_type_name, None)
+            if descriptor:
+                descriptor = dataclasses.replace(
+                    descriptor,
+                    # record_size=field.record_size,
+                    native_type_name=field.type_name,
+                    pointer_type=PointerType.from_field_type(field.object_type),
+                )
+            else:
                 # A struct definition was not found, so this is a "basic" type.
                 descriptor = BasicCLevelTypeDescriptor(
                     native_type_name=field.type_name,
@@ -498,22 +548,21 @@ class AllocationSize:
 
 @dataclass(frozen=True)
 class RawAllocationReport:
+    empty_keys_struct_pointer: PythonCLevelPointerLocation
+    empty_keys_struct_size: RecordSize
     records: Dict[PythonCLevelPointerLocation, AllocationSize]
+
+    def get(self, id: PythonCLevelPointerLocation) -> Optional[AllocationSize]:
+        if id == self.empty_keys_struct_pointer:
+            return AllocationSize(self.empty_keys_struct_size.as_size_in_bits())
+        return self.records.get(id, None)
 
     @classmethod
     def get_current_report(cls, db: 'LibclangDatabase') -> 'RawAllocationReport':
-        all_allocations_report_bytes = gc.pdmp_write_allocation_report()
-
-        report_size = db.all_allocations_report_struct.record_size
-        assert report_size == len(all_allocations_report_bytes)
-        (all_allocations_pointer, num_allocations) = struct.unpack(
-            'PN',
-            all_allocations_report_bytes)
-
-        single_record_size = db.allocation_record_struct.record_size
-        all_allocations_all_bytes = gc.pdmp_write_relocatable_object(
-            all_allocations_pointer,
-            num_allocations * single_record_size.as_size_in_bits())
+        single_record_size = db.allocation_record_struct.record_size.as_size_in_bits()
+        all_allocations_all_bytes = gc.pdmp_write_allocation_report()
+        assert len(all_allocations_all_bytes) % single_record_size == 0
+        num_allocations = len(all_allocations_all_bytes) // single_record_size
 
         records: Dict[PythonCLevelPointerLocation, AllocationSize] = {}
         for cur_record_index in range(0, num_allocations):
@@ -524,7 +573,13 @@ class RawAllocationReport:
                 cur_record_bytes)
             records[PythonCLevelPointerLocation(cur_pointer)] = AllocationSize(cur_nbytes)
 
-        return cls(records)
+        empty_keys_struct_pointer = PythonCLevelPointerLocation(gc.pdmp_write_empty_keys_struct_location())
+        empty_keys_struct_size = db._dictkeysobject_struct.record_size
+
+        return cls(
+            empty_keys_struct_pointer=empty_keys_struct_pointer,
+            empty_keys_struct_size=empty_keys_struct_size,
+            records=records)
 
 
 
@@ -540,10 +595,14 @@ class LibclangDatabase:
         ob_type_offset = input_json['ob_type_offset']
         tp_name_offset = input_json['tp_name_offset']
 
-        struct_field_mapping = {
-            NativeTypeName(name): LibclangNativeObjectDescriptor.from_json(entry)
-            for name, entry in input_json['struct_field_mapping'].items()
-        }
+        struct_field_mapping = {}
+        for name, entry in input_json['struct_field_mapping'].items():
+            try:
+                struct_field_mapping[NativeTypeName(name)] = LibclangNativeObjectDescriptor.from_json(entry)
+            except AssertionError as e:
+                logger.exception(e)
+                continue
+
         py_object_mapping = {
             PythonTypeName(python_name): NativeTypeName(entry['py_object_struct_name'])
             for python_name, entry in input_json['py_object_mapping'].items()
@@ -556,13 +615,17 @@ class LibclangDatabase:
             py_object_mapping=py_object_mapping,
         )
 
-    @cached_property
-    def all_allocations_report_struct(self) -> LibclangNativeObjectDescriptor:
-        return self.struct_field_mapping[NativeTypeName('all_allocations_report')]
+    # @cached_property
+    # def all_allocations_report_struct(self) -> LibclangNativeObjectDescriptor:
+    #     return self.struct_field_mapping[NativeTypeName('all_allocations_report')]
 
     @cached_property
     def allocation_record_struct(self) -> LibclangNativeObjectDescriptor:
         return self.struct_field_mapping[NativeTypeName('allocation_record')]
+
+    @cached_property
+    def _dictkeysobject_struct(self) -> LibclangNativeObjectDescriptor:
+        return self.struct_field_mapping[NativeTypeName('_dictkeysobject')]
 
     @cached_property
     def allocation_report(self) -> RawAllocationReport:
@@ -588,12 +651,14 @@ class LibclangDatabase:
             py_struct_type = self.struct_field_mapping[py_struct_name]
         except KeyError as e:
             raise self.InvalidSourceObjectError(
-                f'no support for {py_type_name} objects currently'
+                f'no support for {py_struct_name} objects currently'
             ) from e
 
         live_entrypoint_object = LivePythonCLevelObject.from_object(source_object, py_struct_type)
 
         stack.append(live_entrypoint_object)
+
+        f = open('/Users/dmcclanahan/tools/cpython/reachable-objects.txt', 'w')
 
         reachable_objects: List[LivePythonCLevelObject] = []
         while stack:
@@ -603,8 +668,13 @@ class LibclangDatabase:
             if obarray.put(live_object):
                 continue
 
+            f.write(repr(live_object) + '\n')
+            f.flush()
+
             reachable_objects.append(live_object)
 
             stack.extend(live_object.get_subobjects(self))
+
+        f.close()
 
         return reachable_objects

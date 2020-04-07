@@ -65,4 +65,6 @@ struct _dictkeysobject {
        see the DK_ENTRIES() macro */
 };
 
+struct _dictkeysobject empty_keys_struct;
+
 #endif
