@@ -1813,17 +1813,18 @@ static Py_ssize_t gc_get_freeze_count_impl(PyObject *module)
 }
 
 PyDoc_STRVAR(gc_pdmp_write_relocatable_object_doc,
-             "pdmp_write_relocatable_object($module, obj) -> bytes\n"
+             "???/pdmp_write_relocatable_object($module, obj) -> bytes\n"
              "\n"
-             "Return a relocatable bytes representation of the object `obj`.");
+             "???/Return a relocatable bytes representation of the object `obj`.");
 
 static PyObject *gc_pdmp_write_relocatable_object(PyObject *module,
                                                   PyObject *args,
                                                   PyObject **kwds) {
-    PyObject *source_object = PyTuple_GET_ITEM(args, 0);
+    PyObject *source_object_location_ptr = PyTuple_GET_ITEM(args, 0);
+    long source_object_location = PyLong_AsLong(source_object_location_ptr);
     PyObject *object_size_ptr = PyTuple_GET_ITEM(args, 1);
     long object_size = PyLong_AsLong(object_size_ptr);
-    return PyBytes_FromStringAndSize((const char *)source_object, object_size);
+    return PyBytes_FromStringAndSize((const char *)source_object_location, object_size);
 }
 
 PyDoc_STRVAR(

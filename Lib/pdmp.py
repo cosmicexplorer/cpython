@@ -5,6 +5,7 @@
     Methods that allow interacting with a `pdmp` type.
 """
 
+import dataclasses
 import gc
 import mmap
 import os
@@ -17,8 +18,7 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from queue import Queue
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 
 _SIZE_BYTES_LONG = 8
@@ -37,31 +37,6 @@ class ByteConsistencyError(Exception):
 
 
 @dataclass(frozen=True)
-class DumpRelocationEntry:
-    source_object: Any
-
-    @property
-    def volatile_memory_id(self) -> int:
-        return id(self.source_object)
-
-    @cached_property
-    def extent(self) -> int:
-        return sys.getsizeof(self.source_object)
-
-    @cached_property
-    def referents(self) -> List[Any]:
-        return list(gc.get_referents(self.source_object))
-
-    def pack_relocation_entry_bytes(self) -> bytes:
-        return _pack_n_longs(
-            self.volatile_memory_id, self.base_offset, self.extent, len(self.referents),
-            *[id(obj) for obj in self.referents])
-
-    def as_volatile_bytes(self) -> bytes:
-        return gc.pdmp_write_relocatable_object(self.source_object, self.extent)
-
-
-@dataclass(frozen=True)
 class LoadRelocationEntry:
     original_volatile_memory_id: int
     base_offset: int
@@ -70,19 +45,6 @@ class LoadRelocationEntry:
 
     def read_source_object_bytes(self, file_handle) -> bytes:
         return file_handle.read(self.extent)
-
-
-class Obarray:
-    """Named after emacs's `obarray` type, which stores the interned symbol table."""
-
-    def __init__(self) -> None:
-        self._obarray: Dict[int, DumpRelocationEntry] = {}
-
-    def put(self, entry: DumpRelocationEntry) -> bool:
-        already_exists = entry.volatile_memory_id in self._obarray
-        if not already_exists:
-            self._obarray[entry.volatile_memory_id] = entry
-        return already_exists
 
 
 @dataclass(frozen=True)
@@ -152,11 +114,9 @@ class pdmp:
         finally:
             mapping.close()
 
-    def dump(self, db: 'LibclangDatabase': source_object: Any) -> List[DumpRelocationEntry]:
-        with self._acquire_write_file_handle(truncate=True) as file_handle:
-            dump_entries = db.dump(relocation_table, source_object)
-
-        return dump_entries
+    def dump(self, db: 'LibclangDatabase': source_object: Any) -> List[Any]:
+        reachable_objects = db.traverse_reachable_objects(source_object)
+        return reachable_objects
 
 
 class Spellable(object):
@@ -174,6 +134,17 @@ class PythonTypeName(Spellable):
 @dataclass(frozen=True)
 class NativeTypeName(Spellable):
     _name: str
+
+    @cached_property
+    def pointer_depth(self) -> 'PointerDepth':
+        return PointerDepth(len(re.findall(r'\*', self.spelling)))
+
+    def dereference_one_pointer_level(self) -> 'NativeTypeName':
+        if self.pointer_depth.depth < 1:
+            raise ValueError(f'Cannot dereference a non-pointer! Was: {self=}')
+        new_name = re.sub(r'\*$', '', self._name)
+        assert new_name != self._name, f'Attempting to dereference one pointer level did not change type name: {self=}'
+        return dataclasses.replace(self, _name=new_name)
 
 
 @dataclass(frozen=True)
@@ -264,10 +235,18 @@ class ObjectField:
 
 
 @dataclass(frozen=True)
+class PointerDepth:
+    """The number of *s in the type name."""
+    depth: int
+
+
+@dataclass(frozen=True)
 class LibclangNativeObjectDescriptor:
     native_type_name: NativeTypeName
     record_size: RecordSize
+    pointer_type: PointerType
     fields: OrderedDict  # [FieldName, ObjectField]
+    intrusive_length_hint: Optional[IntrusiveLength]
 
     @classmethod
     def from_json(cls, input_json: Dict[str, Any]) -> 'LibclangNativeObjectDescriptor':
@@ -277,7 +256,193 @@ class LibclangNativeObjectDescriptor:
             (FieldName(entry['field_name']), ObjectField.from_json(entry))
             for entry in input_json['fields']
         ])
-        return cls(native_type_name=native_type_name, record_size=record_size, fields=fields)
+        return cls(
+            native_type_name=native_type_name,
+            record_size=record_size,
+            # NB: All struct types that we directly extract from libclang are non-pointer types!
+            pointer_type=PointerType.non_pointer,
+            fields=fields)
+
+
+class PythonCLevelType(Enum):
+    non_struct = 'non-struct'
+    struct = 'struct'
+
+
+@dataclass(frozen=True)
+class PythonCLevelPointerLocation:
+    pointer_location: int
+
+    @classmethod
+    def from_python_object(cls, source_object: Any) -> 'PythonCLevelPointerLocation':
+        return cls(id(source_object))
+
+    @classmethod
+    def from_bytes(cls, byte_str: bytes) -> 'PythonCLevelPointerLocation':
+        (num_bytes,) = struct.unpack('l', byte_str)
+        return cls(num_bytes)
+
+    def __add__(self, other: Any) -> 'PythonCLevelPointerLocation':
+        assert isinstance(other, FieldOffset)
+        return type(self)(self.pointer_location + other.as_offset_in_bits())
+
+
+class PointerType(Enum):
+    non_pointer = 'non-pointer'
+    pointer = 'pointer'
+    function_pointer = 'function-pointer'
+
+    @classmethod
+    def from_field_type(cls, field_type: FieldType) -> 'PointerType':
+        if field_type == FieldType.plain_old_data:
+            return cls.non_pointer
+        if field_type in [FieldType.pointer, FieldType.array]:
+            return cls.pointer
+        assert field_type == FieldType.function_pointer
+        return cls.function_pointer
+
+
+@dataclass(frozen=True)
+class BasicCLevelTypeDescriptor:
+    """E.g. 'int'."""
+    native_type_name: NativeTypeName
+    record_size: Optional[RecordSize]
+    pointer_type: PointerType
+    intrusive_length_hint: Optional[IntrusiveLength]
+
+
+@dataclass
+class LivePythonCLevelObject:
+    _type_type: PythonCLevelType
+    _struct_type_descriptor: Optional[LibclangNativeObjectDescriptor]
+    _non_struct_type_descriptor: Optional[BasicCLevelTypeDescriptor]
+    _id: PythonCLevelPointerLocation
+    _record_size: RecordSize
+    _bytes: bytes
+
+    @classmethod
+    def from_object(
+        cls,
+        source_object: Any,
+        descriptor: LibclangNativeObjectDescriptor,
+    ) -> 'LivePythonCLevelObject':
+        return cls.create(
+            id=PythonCLevelPointerLocation.from_python_object(source_object),
+            descriptor=descriptor,
+        )
+
+    @classmethod
+    def create(
+        cls,
+        id: PythonCLevelPointerLocation,
+        descriptor: Union[LibclangNativeObjectDescriptor, BasicCLevelTypeDescriptor],
+    ) -> 'LivePythonCLevelObject':
+        assert isinstance(id, PythonCLevelPointerLocation)
+        assert isinstance(record_size, RecordSize)
+        object_bytes = gc.pdmp_write_relocatable_object(
+            id.pointer_location,
+            descriptor.record_size.as_size_in_bits(),
+        )
+
+        if isinstance(descriptor, LibclangNativeObjectDescriptor):
+            type_type = PythonCLevelType.struct
+            struct_type_descriptor = descriptor
+            non_struct_type_descriptor = None
+        else:
+            assert isinstance(descriptor, BasicCLevelTypeDescriptor)
+            type_type = PythonCLevelType.non_struct
+            struct_type_descriptor = None
+            non_struct_type_descriptor = descriptor
+
+        return cls(
+            _type_type=type_type,
+            _struct_type_descriptor=struct_type_descriptor,
+            _non_struct_type_descriptor=non_struct_type_descriptor,
+            _id=id,
+            _record_size=descriptor.record_size,
+            _bytes=object_bytes,
+        )
+
+    @property
+    def _descriptor(self) -> Union[LibclangNativeObjectDescriptor, BasicCLevelTypeDescriptor]:
+        if self._type_type == PythonCLevelType.struct:
+            return self._struct_type_descriptor
+        return self._non_struct_type_descriptor
+
+    @property
+    def pointer_type(self) -> PointerType:
+        return self._descriptor.pointer_type
+
+    @property
+    def pointer_depth(self) -> PointerDepth:
+        return self._descriptor.native_type_name.pointer_depth
+
+    @property
+    def volatile_memory_id(self) -> PythonCLevelPointerLocation:
+        return self._id
+
+    def get_bytes(self) -> bytes:
+        return self._bytes
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, type(self)):
+            return False
+        return self.volatile_memory_id == other.volatile_memory_id
+
+    def __hash__(self) -> int:
+        return hash(self.volatile_memory_id)
+
+    def get_subobjects(self, db: 'LibclangDatabase') -> List['LivePythonCLevelObject']:
+        if self.pointer_type == PointerType.function_pointer:
+            return []
+
+        if self.pointer_type == PointerType.pointer:
+            # TODO: incorporate array size hint / dynamic allocation info from pymalloc_alloc to
+            # know how many values to return here!!!
+            new_descriptor = dataclasses.replace(
+                self._descriptor,
+                native_type_name=self._descriptor.native_type_name.dereference_one_pointer_level(),
+            )
+            return [type(self).create(
+                id=PythonCLevelPointerLocation.from_bytes(self.get_bytes()),
+                descriptor=new_descriptor,
+            )]
+
+        assert self.pointer_type == PointerType.non_pointer
+        if self._type_type == PythonCLevelType.non_struct:
+            return []
+        assert self._type_type == PythonCLevelType.struct
+
+        sub_objects = []
+        for field in self._struct_type_descriptor.values():
+            descriptor = db.struct_field_mapping.get(field.type_name, None)
+            if not descriptor:
+                # A struct definition was not found, so this is a "basic" type.
+                descriptor = BasicCLevelTypeDescriptor(
+                    native_type_name=field.type_name,
+                    record_size=field.record_size,
+                    pointer_type=PointerType.from_field_type(field.object_type),
+                    intrusive_length_hint=field.intrusive_length_hint,
+                )
+            sub = type(self).create(
+                id=(self.volatile_memory_id + field.offset),
+                descriptor=descriptor,
+            )
+            sub_objects.append(sub)
+        return sub_objects
+
+
+class Obarray:
+    """Named after emacs's `obarray` type, which stores the interned symbol table."""
+
+    def __init__(self) -> None:
+        self._obarray: Set[LivePythonCLevelObject] = set()
+
+    def put(self, entry: LivePythonCLevelObject) -> bool:
+        already_exists = entry.volatile_memory_id in self._obarray
+        if not already_exists:
+            self._obarray.add(entry)
+        return already_exists
 
 
 @dataclass(frozen=True)
@@ -308,5 +473,36 @@ class LibclangDatabase:
             py_object_mapping=py_object_mapping,
         )
 
-    def dump(self, source_object: Any) -> List[DumpRelocationEntry]:
+    class InvalidSourceObjectError(Exception):
         pass
+
+    def traverse_reachable_objects(self, source_object: Any) -> List[LivePythonCLevelObject]:
+        obarray = Obarray()
+        stack = []
+
+        py_type_name = type(source_object).__name__
+        # Get the libclang description of the C struct representing the object.
+        try:
+            py_struct_type = self.py_object_mapping[py_type_name]
+        except KeyError as e:
+            raise self.InvalidSourceObjectError(
+                f'failed to locate libclang entry for {py_type_name}'
+            ) from e
+
+        live_entrypoint_object = LivePythonCLevelObject.from_object(source_object, py_struct_type)
+
+        stack.append(live_entrypoint_object)
+
+        reachable_objects: List[LivePythonCLevelObject] = []
+        while stack:
+            live_object = stack.pop()
+
+            # If the object was already seen, do not attempt to register it again.
+            if obarray.put(live_object):
+                continue
+
+            reachable_objects.append(live_object)
+
+            stack.extend(live_object.get_subobjects())
+
+        return reachable_objects
