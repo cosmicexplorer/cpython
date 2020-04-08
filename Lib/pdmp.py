@@ -27,10 +27,11 @@ logger = logging.getLogger(__name__)
 
 
 _SIZE_BYTES_LONG = 8
+_SIZE_BYTES_POINTER = 8
 _BITS_PER_BYTE = 8
 
 
-def _pack_n_longs(*longs: Tuple[int, ...]) -> bytes:
+def _pack_longs(*longs: Tuple[int, ...]) -> bytes:
     return struct.pack('l' * len(longs), *longs)
 
 
@@ -107,10 +108,9 @@ class pdmp:
     def dump(self, db: 'LibclangDatabase', source_object: Any) -> 'ObjectClosure':
         object_closure = db.traverse_reachable_objects(source_object)
 
-        object_closure.fixup()
-
+        file_contents = object_closure.dumps(db.allocation_report)
         with self._acquire_write_file_handle() as file_handle:
-            object_closure.dump(file_handle)
+            file_handle.write(file_contents)
 
         return object_closure
 
@@ -167,7 +167,7 @@ class FieldOffset:
     _offset: int
 
     def __post_init__(self) -> None:
-        assert isinstance(self._offset, int) and (self._offset >= 0), f'bad offset was: {self._offset}'
+        assert isinstance(self._offset, int) and (self._offset >= 0), f'bad offset: {self=}'
 
     def as_offset_in_bits(self) -> int:
         return self._offset
@@ -179,6 +179,13 @@ class FieldOffset:
     @classmethod
     def parse_from_objdump_hex(cls, objdump_hex_offset: str) -> 'FieldOffset':
         return cls(int(objdump_hex_offset, base=16))
+
+    def __add__(self, arg) -> 'FieldOffset':
+        if isinstance(arg, bytes):
+            return type(self)(self._offset + len(arg))
+        else:
+            assert isinstance(self, type(self))
+            return type(self)(self._offset + arg._offset)
 
     def __mul__(self, n: int) -> 'FieldOffset':
         assert isinstance(n, int) and n >= 0
@@ -446,6 +453,9 @@ class LivePythonCLevelObject:
     def pointer_depth(self) -> PointerDepth:
         return self._descriptor.native_type_name.pointer_depth
 
+    def is_pointer(self) -> bool:
+        return self.pointer_depth.depth > 0
+
     @property
     def volatile_memory_id(self) -> PythonCLevelPointerLocation:
         return self._id
@@ -477,7 +487,8 @@ class LivePythonCLevelObject:
             if self.record_size is None:
                 record_size = RecordSize(_SIZE_BYTES_LONG * _BITS_PER_BYTE)
 
-            allocation_size = db.allocation_report.get(self.volatile_memory_id)
+            allocation_record = db.allocation_report.get(self.volatile_memory_id)
+            allocation_size = (allocation_record and allocation_record.size)
             if allocation_size is None:
                 # If we can't find the allocation, we assume it's intrusive. We require that the
                 # intrusive size hint was provided.
@@ -570,6 +581,11 @@ class AllocationSize:
         return self._size
 
 
+class AllocationType(Enum):
+    static = 'static'
+    heap = 'heap'
+
+
 class StaticSymbolType(Enum):
     text = 'text'
     data = 'data'
@@ -598,14 +614,20 @@ class LiveStaticSymbol:
 
 @dataclass(frozen=True)
 class StaticAllocationReport:
+    text_segment_start: PythonCLevelPointerLocation
+    data_segment_start: PythonCLevelPointerLocation
     text_allocation_report: Dict[PythonCLevelPointerLocation, LiveStaticSymbol]
     data_allocation_report: Dict[PythonCLevelPointerLocation, LiveStaticSymbol]
 
-    def get(self, id: PythonCLevelPointerLocation) -> Optional[AllocationSize]:
+    def get(self, id: PythonCLevelPointerLocation) -> Optional['TrackedAllocation']:
         if text_entry := self.text_allocation_report.get(id, None):
-            return text_entry.size
+            return TrackedAllocation(
+                allocation_type=AllocationType.static,
+                size=text_entry.size)
         if data_entry := self.data_allocation_report.get(id, None):
-            return data_entry.size
+            return TrackedAllocation(
+                allocation_type=AllocationType.static,
+                size=data_entry.size)
         return None
 
     # 0000000100002500 l     F __TEXT,__text  _freechildren
@@ -688,8 +710,17 @@ class StaticAllocationReport:
                 else:
                     data_allocation_report[location] = symbol
 
-        return cls(text_allocation_report=text_allocation_report,
-                   data_allocation_report=data_allocation_report)
+        return cls(
+            text_segment_start=text_segment_start,
+            data_segment_start=data_segment_start,
+            text_allocation_report=text_allocation_report,
+            data_allocation_report=data_allocation_report)
+
+
+@dataclass(frozen=True)
+class TrackedAllocation:
+    allocation_type: AllocationType
+    size: Optional[AllocationSize]
 
 
 @dataclass(frozen=True)
@@ -700,11 +731,14 @@ class RawAllocationReport:
     def static_report(self) -> StaticAllocationReport:
         return StaticAllocationReport.extract_from_executable()
 
-    def get(self, id: PythonCLevelPointerLocation) -> Optional[AllocationSize]:
+    def get(self, id: PythonCLevelPointerLocation) -> Optional[TrackedAllocation]:
         if live_record_size := self.records.get(id, None):
-            return live_record_size
-        if static_record_size := self.static_report.get(id):
-            return static_record_size
+            return TrackedAllocation(
+                allocation_type=AllocationType.heap,
+                size=live_record_size,
+            )
+        if static_record := self.static_report.get(id):
+            return static_record
         return None
 
     @classmethod
@@ -814,16 +848,99 @@ class LibclangDatabase:
         return ObjectClosure(reachable_objects)
 
 
+@dataclass(frozen=True)
+class RelocatedObject:
+    original: LivePythonCLevelObject
+    new_offset: FieldOffset
+
+
 @dataclass
 class ObjectClosure:
-    objects: Dict[PythonCLevelPointerLocation, LivePythonCLevelObject]
+    _objects: Dict[PythonCLevelPointerLocation, LivePythonCLevelObject]
+
+    _MMAP_ARBITRARY_STARTING_ADDRESS = FieldOffset(2 ** 31)
+
+    @classmethod
+    def MMAP_START_ADDRESS(cls) -> FieldOffset:
+        return cls._MMAP_ARBITRARY_STARTING_ADDRESS
 
     def __init__(self, objects: List[LivePythonCLevelObject]) -> None:
-        self.objects = {obj.volatile_memory_id: obj for obj in objects}
+        self._objects = {obj.volatile_memory_id: obj for obj in objects}
 
-    def fixup(self) -> None:
-        """Within the set of reachable objects, """
-        ...
+    def dumps(self, allocation_report: RawAllocationReport) -> bytes:
+        """Write the bytes of every non-static object out to file."""
 
-    def dump(self, file_handle) -> int:
-        ...
+        all_bytes = b''
+
+        # Line up all the heap-allocated python objects consecutively (without writing anything to
+        # the file just yet).
+        current_offset = FieldOffset(0)
+        offsets: Dict[PythonCLevelPointerLocation, FieldOffset] = {}
+
+        for obj in self._objects.values():
+            allocation_record = allocation_report.get(obj.volatile_memory_id)
+            if allocation_record and (allocation_record.allocation_type == AllocationType.static):
+                continue
+
+            # If we can't find the object's allocation, we pretend it was heap-allocated, and we
+            # track it. Elsewhere, we assume that pointers we can't locate are sized 1 (as in,
+            # allocated as an array of size one of the struct they represent).
+            offsets[obj.volatile_memory_id] = current_offset
+            current_offset += obj.get_bytes()
+
+        ### LET'S WRITE SOME BYTES!!!
+        # (1) Write out the size of the first object. This will be the entry point when the pdmp
+        # file is loaded, so we don't need to record any other object sizes.
+        source_object = list(self._objects.values())[0]
+        all_bytes += _pack_longs(len(source_object.get_bytes()))
+
+        # (2) Write out the start of the text and data segments. We will validate that these are the
+        # same when we load the pdmp file.
+        text_start = allocation_report.static_report.text_segment_start
+        all_bytes += _pack_longs(text_start.pointer_location)
+        data_start = allocation_report.static_report.data_segment_start
+        all_bytes += _pack_longs(data_start.pointer_location)
+
+        # (3) Relocate the objects!!
+        relocations: Dict[PythonCLevelPointerLocation, RelocatedObject] = {}
+        object_initial_offset = FieldOffset(len(all_bytes))
+        for original_id, basic_offset in offsets.items():
+            entry = RelocatedObject(
+                original=self._objects[original_id],
+                new_offset=(object_initial_offset + basic_offset),
+            )
+            relocations[original_id] = entry
+            all_bytes += entry.original.get_bytes()
+
+        all_bytes_mutable = bytearray(all_bytes)
+
+        # (4) Within the set of reachable objects, rewrite the (now-relocated, but previously)
+        # heap-allocated pointers to point amongst themselves.
+        for relocated_object in relocations.values():
+            if relocated_object.original.is_pointer():
+                relocated_bit_offset = relocated_object.new_offset.as_offset_in_bits()
+                assert relocated_bit_offset % _BITS_PER_BYTE == 0
+                byte_offset = relocated_bit_offset // _BITS_PER_BYTE
+
+                original_bytes = relocated_object.original.get_bytes()
+                assert len(original_bytes) % _SIZE_BYTES_POINTER == 0
+
+                relocated_bytes = b''
+                for array_index in range(len(original_bytes) // _SIZE_BYTES_POINTER):
+                    cur_within_array_offset = _SIZE_BYTES_POINTER * array_index
+                    cur_pointer_bytes = original_bytes[cur_within_array_offset:(cur_within_array_offset + _SIZE_BYTES_POINTER)]
+                    original_pointer_value = PythonCLevelPointerLocation(
+                        struct.unpack('P', cur_pointer_bytes))
+
+                    if relocated_pointer_target := relocations.get(original_pointer_value, None):
+                        new_pointer_value = struct.pack(
+                            'P',
+                            (self.MMAP_START_ADDRESS +
+                             relocated_pointer_target.new_offset.as_offset_in_bits()))
+                        assert len(new_pointer_value) == 8
+
+                        relocated_bytes += new_pointer_value
+
+                all_bytes_mutable[byte_offset:(byte_offset + len(original_bytes))] = relocated_bytes
+
+        return bytes(all_bytes_mutable)
