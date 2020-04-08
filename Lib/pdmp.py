@@ -12,6 +12,7 @@ import mmap
 import os
 import re
 import struct
+import subprocess
 import sys
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -81,23 +82,7 @@ class pdmp:
             return relocation_entries
 
     @contextmanager
-    def _read_handle(self):
-        file_handle = open(self.file_path, 'rb')
-
-        flags = mmap.MAP_PRIVATE
-        prot = mmap.PROT_READ
-        length = self._get_mapped_memory_length()
-        mapping = mmap.mmap(file_handle.fileno(), length, flags, prot)
-
-        try:
-            yield mapping
-        finally:
-            mapping.close()
-            file_handle.close()
-
-    @contextmanager
-    def _acquire_write_file_handle(self, *, truncate: bool = True):
-        """Get a write lock on the current file."""
+    def _acquire_write_file_handle(self, *, truncate: bool = False):
         mode = 'wb' if truncate else 'r+b'
         file_handle = open(self.file_path, mode)
 
@@ -119,9 +104,15 @@ class pdmp:
         finally:
             mapping.close()
 
-    def dump(self, db: 'LibclangDatabase', source_object: Any) -> List[Any]:
-        reachable_objects = db.traverse_reachable_objects(source_object)
-        return reachable_objects
+    def dump(self, db: 'LibclangDatabase', source_object: Any) -> 'ObjectClosure':
+        object_closure = db.traverse_reachable_objects(source_object)
+
+        object_closure.fixup()
+
+        with self._acquire_write_file_handle() as file_handle:
+            object_closure.dump(file_handle)
+
+        return object_closure
 
 
 class Spellable(object):
@@ -185,9 +176,18 @@ class FieldOffset:
     def from_record_size(cls, record_size: 'RecordSize') -> 'FieldOffset':
         return cls(record_size.as_size_in_bits())
 
+    @classmethod
+    def parse_from_objdump_hex(cls, objdump_hex_offset: str) -> 'FieldOffset':
+        return cls(int(objdump_hex_offset, base=16))
+
     def __mul__(self, n: int) -> 'FieldOffset':
         assert isinstance(n, int) and n >= 0
         return type(self)(self._offset * n)
+
+    def __sub__(self, other: 'FieldOffset') -> 'FieldOffset':
+        assert isinstance(other, type(self))
+        assert self._offset >= other._offset, f'invalid offset subtraction: {self.offset=}, {other._offset=}'
+        return type(self)(self._offset - other._offset)
 
 
 @dataclass(frozen=True)
@@ -338,9 +338,14 @@ class PythonCLevelPointerLocation:
         (num_bytes,) = struct.unpack('l', byte_str)
         return cls(num_bytes)
 
-    def __add__(self, other: Any) -> 'PythonCLevelPointerLocation':
+    def __add__(self, other: FieldOffset) -> 'PythonCLevelPointerLocation':
         assert isinstance(other, FieldOffset)
         return type(self)(self.pointer_location + other.as_offset_in_bits())
+
+    def __sub__(self, other: 'PythonCLevelPointerLocation') -> FieldOffset:
+        assert isinstance(other, type(self))
+        assert self.pointer_location >= other.pointer_location, f'invalid subtraction: {self=} - {other=}'
+        return FieldOffset(self.pointer_location - other.pointer_location)
 
 
 class PointerType(Enum):
@@ -478,15 +483,15 @@ class LivePythonCLevelObject:
                 # intrusive size hint was provided.
                 num_allocations = self.intrusive_length_hint
                 if num_allocations is None:
-                    logger.warn(f'Could not find an intrusive length hint, and allocation was not traced. Assuming garbage...')
+                    # import pdb; pdb.set_trace()
+                    logger.warn(f'Could not find an intrusive length hint, and allocation was not traced. Assuming 1...')
+                    num_allocations = IntrusiveLength(1)
                     return []
             else:
                 assert (allocation_size == 1) or (allocation_size % record_size.as_size_in_bits() == 0)
-                num_allocations = allocation_size // record_size.as_size_in_bits()
+                num_allocations = IntrusiveLength(allocation_size // record_size.as_size_in_bits())
 
-            if num_allocations.get_length() <= 0:
-                logger.warn(f'The allocation length hint was {num_allocations=} -- assuming 0...')
-                return []
+            assert num_allocations.get_length() > 0
 
             reduced_type_name = self._descriptor.native_type_name.dereference_one_pointer_level()
             new_descriptor = dataclasses.replace(
@@ -558,20 +563,149 @@ class Obarray:
 class AllocationSize:
     _size: int
 
+    def __post_init__(self) -> None:
+        assert self._size >= 0
+
     def as_size_in_bits(self) -> int:
         return self._size
 
 
+class StaticSymbolType(Enum):
+    text = 'text'
+    data = 'data'
+
+    @classmethod
+    def parse_from_segment_descriptor(cls, segment_descriptor: str) -> 'StaticSymbolType':
+        if segment_descriptor == '__TEXT,__text':
+            return cls.text
+        if segment_descriptor == '__DATA,__data':
+            return cls.data
+        raise TypeError(f'{segment_descriptor=} was not a valid static symbol type!')
+
+
 @dataclass(frozen=True)
-class RawAllocationReport:
-    empty_keys_struct_pointer: PythonCLevelPointerLocation
-    empty_keys_struct_size: RecordSize
-    records: Dict[PythonCLevelPointerLocation, AllocationSize]
+class StaticSymbolName:
+    name: str
+
+
+@dataclass(frozen=True)
+class LiveStaticSymbol:
+    symbol_type: StaticSymbolType
+    location: PythonCLevelPointerLocation
+    size: Optional[AllocationSize]
+    name: StaticSymbolName
+
+
+@dataclass(frozen=True)
+class StaticAllocationReport:
+    text_allocation_report: Dict[PythonCLevelPointerLocation, LiveStaticSymbol]
+    data_allocation_report: Dict[PythonCLevelPointerLocation, LiveStaticSymbol]
 
     def get(self, id: PythonCLevelPointerLocation) -> Optional[AllocationSize]:
-        if id == self.empty_keys_struct_pointer:
-            return AllocationSize(self.empty_keys_struct_size.as_size_in_bits())
-        return self.records.get(id, None)
+        if text_entry := self.text_allocation_report.get(id, None):
+            return text_entry.size
+        if data_entry := self.data_allocation_report.get(id, None):
+            return data_entry.size
+        return None
+
+    # 0000000100002500 l     F __TEXT,__text  _freechildren
+    # 000000010027aa68 l     O __DATA,__data  _empty_keys_struct
+    _static_record_pattern = re.compile(r'^([0-9]{16}) l     [FO] (__TEXT__,__text|__DATA,__data)\t(.*)$')
+
+    @classmethod
+    def extract_from_executable(cls) -> 'StaticAllocationReport':
+        # Get the start of the text and data sections.
+        etext, edata = gc.pdmp_get_data_and_text_segment_starts()
+        text_segment_start = PythonCLevelPointerLocation(etext)
+        data_segment_start = PythonCLevelPointerLocation(edata)
+
+        # Now, extract the records of allocations from the python executable.
+        dumped_segments = list(
+            subprocess.run(['objdump', '-macho', '-t', '-all-headers', sys.executable],
+                           capture_output=True,
+                           check=True)
+            .stdout
+            .decode()
+            .splitlines())
+
+        assert dumped_segments[0] == f'{sys.executable}:'
+        assert dumped_segments[1] == 'Sections:'
+        assert dumped_segments[2].startswith('Idx')
+
+        #   0 __text        001d44ae 0000000100001680 TEXT
+        dumped_text_segment = re.match(r'  0 __text        ([0-9a-f]{8}) ([0-9a-f]{16}) TEXT',
+                                       dumped_segments[3])
+        assert dumped_text_segment is not None
+        _dumped_text_size, dumped_text_start = dumped_text_segment.groups()
+        dumped_text_start = PythonCLevelPointerLocation(int(dumped_text_start, base=16))
+        live_text_segment_offset = text_segment_start - dumped_text_start
+
+        #   9 __data        0003362d 0000000100269980 DATA
+        dumped_data_segment = re.match(r'  9 __data        ([0-9a-f]{8}) ([0-9a-f]{16}) DATA',
+                                       dumped_segments[12])
+        assert dumped_data_segment is not None
+        _dumped_data_size, dumped_data_start = dumped_data_segment.groups()
+        dumped_data_start = PythonCLevelPointerLocation(int(dumped_data_start, base=16))
+        live_data_segment_offset = data_segment_start - dumped_data_start
+
+        assert dumped_segments[16] == 'SYMBOL TABLE:'
+
+        possibly_parseable_static_symbols = dumped_segments[17:]
+
+        text_allocation_report = {}
+        data_allocation_report = {}
+        for index, line in enumerate(possibly_parseable_static_symbols):
+            if static_segment_record := cls._static_record_pattern.match(line):
+                hex_offset, symbol_type_str, symbol_name = tuple(static_segment_record.groups())
+                symbol_type = StaticSymbolType.parse_from_segment_descriptor(symbol_type_str)
+                offset = FieldOffset.parse_from_objdump_hex(hex_offset)
+
+                if symbol_type == StaticSymbolType.text:
+                    location = text_segment_start + live_text_segment_offset + offset
+                else:
+                    assert symbol_type == StaticSymbolType.data
+                    location = data_segment_start + live_data_segment_offset + offset
+
+                allocation_size = None
+                if index < len(possibly_parseable_static_symbols) - 1:
+                    next_line = possibly_parseable_static_symbols[index + 1]
+                    if next_record := cls._static_record_pattern.match(next_line):
+                        next_offset = FieldOffset.parse_from_objdump_hex(next_record.groups()[0])
+                        if next_offset.as_offset_in_bits() != 0:
+                            guessed_size = (next_offset - offset).as_offset_in_bits()
+                            if guessed_size >= 0:
+                                allocation_size = AllocationSize(guessed_size)
+
+                symbol = LiveStaticSymbol(
+                    symbol_type=symbol_type,
+                    location=location,
+                    size=allocation_size,
+                    name=StaticSymbolName(symbol_name),
+                )
+
+                if symbol_type == StaticSymbolType.text:
+                    text_allocation_report[location] = symbol
+                else:
+                    data_allocation_report[location] = symbol
+
+        return cls(text_allocation_report=text_allocation_report,
+                   data_allocation_report=data_allocation_report)
+
+
+@dataclass(frozen=True)
+class RawAllocationReport:
+    records: Dict[PythonCLevelPointerLocation, AllocationSize]
+
+    @cached_property
+    def static_report(self) -> StaticAllocationReport:
+        return StaticAllocationReport.extract_from_executable()
+
+    def get(self, id: PythonCLevelPointerLocation) -> Optional[AllocationSize]:
+        if live_record_size := self.records.get(id, None):
+            return live_record_size
+        if static_record_size := self.static_report.get(id):
+            return static_record_size
+        return None
 
     @classmethod
     def get_current_report(cls, db: 'LibclangDatabase') -> 'RawAllocationReport':
@@ -589,13 +723,7 @@ class RawAllocationReport:
                 cur_record_bytes)
             records[PythonCLevelPointerLocation(cur_pointer)] = AllocationSize(cur_nbytes)
 
-        empty_keys_struct_pointer = PythonCLevelPointerLocation(gc.pdmp_write_empty_keys_struct_location())
-        empty_keys_struct_size = db._dictkeysobject_struct.record_size
-
-        return cls(
-            empty_keys_struct_pointer=empty_keys_struct_pointer,
-            empty_keys_struct_size=empty_keys_struct_size,
-            records=records)
+        return cls(records)
 
 
 
@@ -631,17 +759,9 @@ class LibclangDatabase:
             py_object_mapping=py_object_mapping,
         )
 
-    # @cached_property
-    # def all_allocations_report_struct(self) -> LibclangNativeObjectDescriptor:
-    #     return self.struct_field_mapping[NativeTypeName('all_allocations_report')]
-
     @cached_property
     def allocation_record_struct(self) -> LibclangNativeObjectDescriptor:
         return self.struct_field_mapping[NativeTypeName('allocation_record')]
-
-    @cached_property
-    def _dictkeysobject_struct(self) -> LibclangNativeObjectDescriptor:
-        return self.struct_field_mapping[NativeTypeName('_dictkeysobject')]
 
     @cached_property
     def allocation_report(self) -> RawAllocationReport:
@@ -650,7 +770,7 @@ class LibclangDatabase:
     class InvalidSourceObjectError(Exception):
         pass
 
-    def traverse_reachable_objects(self, source_object: Any) -> List[LivePythonCLevelObject]:
+    def traverse_reachable_objects(self, source_object: Any) -> 'ObjectClosure':
         obarray = Obarray()
         stack = []
 
@@ -679,8 +799,6 @@ class LibclangDatabase:
 
         stack.append(live_entrypoint_object)
 
-        f = open('/Users/dmcclanahan/tools/cpython/reachable-objects.txt', 'w')
-
         reachable_objects: List[LivePythonCLevelObject] = []
         while stack:
             live_object = stack.pop()
@@ -689,13 +807,23 @@ class LibclangDatabase:
             if obarray.put(live_object):
                 continue
 
-            f.write(repr(live_object) + '\n')
-            f.flush()
-
             reachable_objects.append(live_object)
 
             stack.extend(live_object.get_subobjects(self))
 
-        f.close()
+        return ObjectClosure(reachable_objects)
 
-        return reachable_objects
+
+@dataclass
+class ObjectClosure:
+    objects: Dict[PythonCLevelPointerLocation, LivePythonCLevelObject]
+
+    def __init__(self, objects: List[LivePythonCLevelObject]) -> None:
+        self.objects = {obj.volatile_memory_id: obj for obj in objects}
+
+    def fixup(self) -> None:
+        """Within the set of reachable objects, """
+        ...
+
+    def dump(self, file_handle) -> int:
+        ...

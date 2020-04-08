@@ -37,6 +37,10 @@
 #include "Objects/dict-common.h"
 #include "obmalloc.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <mach-o/getsect.h>
+
 typedef struct _gc_runtime_state GCState;
 
 /*[clinic input]
@@ -1816,9 +1820,9 @@ static Py_ssize_t gc_get_freeze_count_impl(PyObject *module)
 }
 
 PyDoc_STRVAR(gc_pdmp_write_relocatable_object_doc,
-             "???/pdmp_write_relocatable_object($module, obj) -> bytes\n"
+             "? ?/pdmp_write_relocatable_object($module, obj) -> bytes\n"
              "\n"
-             "???/Return a relocatable bytes representation of the object `obj`.");
+             "? ?/Return a relocatable bytes representation of the object `obj`.");
 
 static PyObject *gc_pdmp_write_relocatable_object(PyObject *module,
                                                   PyObject *args,
@@ -1830,16 +1834,23 @@ static PyObject *gc_pdmp_write_relocatable_object(PyObject *module,
     return PyBytes_FromStringAndSize((const char *)source_object_location, object_size);
 }
 
-static PyObject *gc_pdmp_write_empty_keys_struct_location(PyObject* module) {
-    return PyLong_FromVoidPtr(&empty_keys_struct);
-}
-
 static PyObject *gc_pdmp_write_allocation_report(PyObject *module) {
     struct all_allocations_report report = report_all_allocations();
     PyObject* result = PyBytes_FromStringAndSize((const char *)report.all_allocations,
                                                  (sizeof(struct allocation_record) * report.num_allocations));
     /* FIXME: we are now leaking!!!!! */
     /* free_all_allocations_report(&report); */
+    return result;
+}
+
+static PyObject *gc_pdmp_get_data_and_text_segment_starts(PyObject *module) {
+    PyObject *etext_obj = PyLong_FromVoidPtr((void*)get_etext());
+    PyObject *edata_obj = PyLong_FromVoidPtr((void*)get_edata());
+
+    PyObject *result = PyTuple_New(2);
+    PyTuple_SET_ITEM(result, 0, etext_obj);
+    PyTuple_SET_ITEM(result, 1, edata_obj);
+
     return result;
 }
 
@@ -1885,8 +1896,8 @@ static PyMethodDef GcMethods[] = {
     {"pdmp_write_relocatable_object",
      (PyCFunction)gc_pdmp_write_relocatable_object, METH_VARARGS,
      gc_pdmp_write_relocatable_object_doc},
-    {"pdmp_write_allocation_report", (PyCFunction)gc_pdmp_write_allocation_report, METH_NOARGS, "???"},
-    {"pdmp_write_empty_keys_struct_location", (PyCFunction)gc_pdmp_write_empty_keys_struct_location, METH_NOARGS, "???"},
+    {"pdmp_write_allocation_report", (PyCFunction)gc_pdmp_write_allocation_report, METH_NOARGS, "aaa"},
+    {"pdmp_get_data_and_text_segment_starts", (PyCFunction)gc_pdmp_get_data_and_text_segment_starts, METH_NOARGS, "bbb"},
     {NULL, NULL} /* Sentinel */
 };
 

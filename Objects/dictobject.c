@@ -436,7 +436,7 @@ dictkeys_set_index(PyDictKeysObject *keys, Py_ssize_t i, Py_ssize_t ix)
 /* This immutable, empty PyDictKeysObject is used for PyDict_Clear()
  * (which cannot fail and thus can do no allocation).
  */
-PyDictKeysObject empty_keys_struct = {
+static PyDictKeysObject empty_keys_struct = {
         1, /* dk_refcnt */
         1, /* dk_size */
         lookdict_split, /* dk_lookup */
