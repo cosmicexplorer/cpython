@@ -731,53 +731,85 @@ PyObject_Free(void *ptr)
 #  define LIKELY(value) (value)
 #endif
 
-static _Py_atomic_int cur_max_allocation_records = {-1};
-static struct allocation_record* all_possible_allocations = NULL;
-static _Py_atomic_int total_num_allocations = {-1};
+static _Py_atomic_int _allocation_records_size_global = {0};
+static _Py_atomic_int _allocation_records_capacity_global = {0};
+static _Py_atomic_address _all_allocation_records_global = {0};
 
-void *record_allocation(void *pointer, size_t nbytes) {
-    /* TODO: this is so we don't overwrite all_possible_allocations if two allocations race to be
-     * the first -- does this work?? */
-    _Py_atomic_load(&cur_max_allocation_records);
-    if (UNLIKELY(all_possible_allocations == NULL)) {
+struct allocation_record_state {
+    size_t size;
+    size_t capacity;
+    struct allocation_record* records;
+};
+
+inline struct allocation_record_state get_allocation_record_state(void) {
+    int size = _Py_atomic_load(&_allocation_records_size_global);
+    assert(size >= 0);
+
+    int capacity = _Py_atomic_load(&_allocation_records_capacity_global);
+    assert(capacity >= 0);
+
+    struct allocation_record* records = _Py_atomic_load(&_all_allocation_records_global);
+
+    struct allocation_record_state ret = {
+        .size = (size_t)size,
+        .capacity = (size_t)capacity,
+        .records = records,
+    };
+    return ret;
+}
+
+inline void set_allocation_record_state(struct allocation_record_state state) {
+    assert(state.size < INT_MAX);
+    assert(state.capacity < INT_MAX);
+
+    _Py_atomic_store(&_allocation_records_size_global, state.size);
+    _Py_atomic_store(&_allocation_records_capacity_global, state.capacity);
+    _Py_atomic_store(&_all_allocation_records_global, state.records);
+}
+
+void *
+record_allocation(void *pointer, size_t nbytes) {
+    struct allocation_record_state state = get_allocation_record_state();
+
+    if (UNLIKELY(state.records == NULL)) {
 #define ALLOCATION_FACTOR 100000
-        _Py_atomic_store(&cur_max_allocation_records, ALLOCATION_FACTOR);
-        all_possible_allocations =
-            malloc(sizeof(struct allocation_record) * ALLOCATION_FACTOR);
+        state.size = 0;
+        state.records = malloc(sizeof(struct allocation_record) * ALLOCATION_FACTOR);
+        state.capacity = ALLOCATION_FACTOR;
 #undef ALLOCATION_FACTOR
-        _Py_atomic_store(&total_num_allocations, 0);
+        set_allocation_record_state(state);
     }
 
-    /* TODO: make sure this is consistent with _Py_memory_order_seq_cst!! */
-    int num_allocations = _Py_atomic_load(&total_num_allocations);
-    int cur_max_allocations = _Py_atomic_load(&cur_max_allocation_records);
-    if (UNLIKELY(num_allocations > cur_max_allocations)) {
+    if (UNLIKELY(state.size >= state.capacity)) {
         /* Reallocate for twice the size, copying over the original elements. */
-        int new_max_allocations = cur_max_allocations * 2;
-        struct allocation_record* new_allocations = malloc(sizeof(struct allocation_record) * new_max_allocations);
-        memcpy(new_allocations, all_possible_allocations, cur_max_allocations);
-        free(all_possible_allocations);
-        all_possible_allocations = new_allocations;
-        _Py_atomic_store(&cur_max_allocation_records, new_max_allocations);
+        size_t new_capacity = state.capacity * 2;
+        size_t full_allocation_record_size = sizeof(struct allocation_record) * new_capacity;
+        struct allocation_record* new_allocations = malloc(full_allocation_record_size);
+        memcpy(new_allocations, state.records, state.capacity);
+        free(state.records);
+        state.records = new_allocations;
+        state.capacity = new_capacity;
+        new_allocations = NULL;
     }
-    _Py_atomic_store(&total_num_allocations, num_allocations + 1);
 
-    struct allocation_record *cur_record =
-        &all_possible_allocations[num_allocations];
+    /* NB: Increment the `allocation_records_size` value here. */
+    struct allocation_record *cur_record = &state.records[state.size++];
     cur_record->pointer = pointer;
     cur_record->nbytes = nbytes;
+
+    set_allocation_record_state(state);
 
     return pointer;
 }
 
 struct all_allocations_report report_all_allocations(void) {
-    int num_allocations = _Py_atomic_load(&total_num_allocations);
-    struct allocation_record* all_allocations = malloc(sizeof(struct allocation_record) * num_allocations);
-    memcpy(all_allocations, all_possible_allocations, num_allocations);
-    /* TODO: this is intended to ensure consistency of memcpy. No clue whether it'll work. */
-    _Py_atomic_store(&total_num_allocations, num_allocations);
-    struct all_allocations_report report = {.all_allocations = all_allocations,
-                                            .num_allocations = num_allocations};
+    struct allocation_record_state state = get_allocation_record_state();
+
+    size_t full_allocation_record_size = sizeof(struct allocation_record) * state.size;
+    struct allocation_record* allocations_report = malloc(full_allocation_record_size);
+    memcpy(allocations_report, state.records, full_allocation_record_size);
+    struct all_allocations_report report = {.all_allocations = allocations_report,
+                                            .num_allocations = state.size};
     return report;
 }
 

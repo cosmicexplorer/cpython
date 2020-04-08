@@ -136,13 +136,16 @@ class PythonTypeName(Spellable):
     _name: str
 
     @classmethod
-    def from_object(cls, source_object: Any) -> 'PythonTypeName':
+    def from_python_object(cls, source_object: Any) -> 'PythonTypeName':
         return cls(type(source_object).__name__)
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class NativeTypeName(Spellable):
     _name: str
+
+    def __init__(self, _name: str) -> None:
+        self._name = _name.strip()
 
     @cached_property
     def pointer_depth(self) -> 'PointerDepth':
@@ -183,13 +186,17 @@ class FieldOffset:
         return cls(record_size.as_size_in_bits())
 
     def __mul__(self, n: int) -> 'FieldOffset':
-        assert isinstance(n, int) and n > 0
+        assert isinstance(n, int) and n >= 0
         return type(self)(self._offset * n)
 
 
 @dataclass(frozen=True)
 class RecordSize:
     _size: int
+
+    @classmethod
+    def from_python_object(cls, source_object: Any) -> 'RecordSize':
+        return cls(sys.getsizeof(source_object))
 
     @classmethod
     def from_json(cls, json_int: Optional[int]) -> Optional['RecordSize']:
@@ -218,7 +225,10 @@ class IntrusiveLength:
     `.ob_size` elements. So we will want to look that one up in the allocation database we build
     in `pymalloc_alloc` first, before assuming it's just size 1, for example.
     """
-    length: int
+    _length: int
+
+    def get_length(self) -> int:
+        return self._length
 
 
 @dataclass(frozen=True)
@@ -367,7 +377,7 @@ class LivePythonCLevelObject:
     _bytes: bytes
 
     @classmethod
-    def from_object(
+    def from_python_object(
         cls,
         source_object: Any,
         descriptor: Union[LibclangNativeObjectDescriptor, BasicCLevelTypeDescriptor],
@@ -384,13 +394,15 @@ class LivePythonCLevelObject:
         descriptor: Union[LibclangNativeObjectDescriptor, BasicCLevelTypeDescriptor],
     ) -> 'LivePythonCLevelObject':
         assert isinstance(id, PythonCLevelPointerLocation)
-        try:
-            object_bytes = gc.pdmp_write_relocatable_object(
-                id.pointer_location,
-                descriptor.record_size.as_size_in_bits(),
-            )
-        except AttributeError as e:
-            raise AttributeError(f'failed to use {descriptor=}: {e}') from e
+
+        record_size = descriptor.record_size
+        if record_size is None:
+            record_size = RecordSize(_SIZE_BYTES_LONG * _BITS_PER_BYTE)
+
+        object_bytes = gc.pdmp_write_relocatable_object(
+            id.pointer_location,
+            record_size.as_size_in_bits(),
+        )
 
         if isinstance(descriptor, LibclangNativeObjectDescriptor):
             type_type = PythonCLevelType.struct
@@ -407,7 +419,7 @@ class LivePythonCLevelObject:
             _struct_type_descriptor=struct_type_descriptor,
             _non_struct_type_descriptor=non_struct_type_descriptor,
             _id=id,
-            _record_size=descriptor.record_size,
+            _record_size=record_size,
             _bytes=object_bytes,
         )
 
@@ -453,43 +465,47 @@ class LivePythonCLevelObject:
             return []
 
         if self.pointer_type == PointerType.pointer:
-            assert self.record_size is not None
-
             if self.pointer_depth.depth == 1:
-                cur_record_size = self.record_size
-                assert cur_record_size is not None
+                record_size = self.record_size
             else:
                 assert self.pointer_depth.depth > 0
-                # Pointers are 64 bits long!
-                cur_record_size = RecordSize(64)
+            if self.record_size is None:
+                record_size = RecordSize(_SIZE_BYTES_LONG * _BITS_PER_BYTE)
 
             allocation_size = db.allocation_report.get(self.volatile_memory_id)
             if allocation_size is None:
                 # If we can't find the allocation, we assume it's intrusive. We require that the
                 # intrusive size hint was provided.
-                if self.intrusive_length_hint is None:
-                    import pdb; pdb.set_trace()
-                assert self.intrusive_length_hint is not None
                 num_allocations = self.intrusive_length_hint
+                if num_allocations is None:
+                    logger.warn(f'Could not find an intrusive length hint, and allocation was not traced. Assuming garbage...')
+                    return []
             else:
-                num_allocations = allocation_size // cur_record_size.as_size_in_bits()
-                assert (allocation_size == 1) or (allocation_size % cur_record_size.as_size_in_bits() == 0)
+                assert (allocation_size == 1) or (allocation_size % record_size.as_size_in_bits() == 0)
+                num_allocations = allocation_size // record_size.as_size_in_bits()
 
-            assert num_allocations > 0
+            if num_allocations.get_length() <= 0:
+                logger.warn(f'The allocation length hint was {num_allocations=} -- assuming 0...')
+                return []
 
+            reduced_type_name = self._descriptor.native_type_name.dereference_one_pointer_level()
             new_descriptor = dataclasses.replace(
                 self._descriptor,
-                native_type_name=self._descriptor.native_type_name.dereference_one_pointer_level(),
+                native_type_name=reduced_type_name,
+                pointer_type=(
+                    PointerType.non_pointer if reduced_type_name.pointer_depth.depth == 0
+                    else PointerType.pointer
+                ),
                 intrusive_length_hint=None,
             )
-            base_pointer = PythonCLevelPointerLocation.from_bytes(self.get_bytes())
+            base_pointer = self.volatile_memory_id
 
             sub_pointers = [
                 type(self).create(
-                    id=(base_pointer + (FieldOffset.from_record_size(cur_record_size) * cur_element_index)),
+                    id=(base_pointer + (FieldOffset.from_record_size(record_size) * cur_element_index)),
                     descriptor=new_descriptor,
                 )
-                for cur_element_index in range(num_allocations)
+                for cur_element_index in range(num_allocations.get_length())
             ]
 
             return sub_pointers
@@ -600,7 +616,7 @@ class LibclangDatabase:
             try:
                 struct_field_mapping[NativeTypeName(name)] = LibclangNativeObjectDescriptor.from_json(entry)
             except AssertionError as e:
-                logger.exception(e)
+                # logger.exception(e)
                 continue
 
         py_object_mapping = {
@@ -638,7 +654,7 @@ class LibclangDatabase:
         obarray = Obarray()
         stack = []
 
-        py_type_name = PythonTypeName.from_object(source_object)
+        py_type_name = PythonTypeName.from_python_object(source_object)
         # Get the libclang description of the C struct representing the object.
         try:
             py_struct_name = self.py_object_mapping[py_type_name]
@@ -648,13 +664,18 @@ class LibclangDatabase:
             ) from e
 
         try:
-            py_struct_type = self.struct_field_mapping[py_struct_name]
+            descriptor = self.struct_field_mapping[py_struct_name]
         except KeyError as e:
-            raise self.InvalidSourceObjectError(
-                f'no support for {py_struct_name} objects currently'
-            ) from e
+            # A struct definition was not found, so this is a "basic" type.
+            descriptor = BasicCLevelTypeDescriptor(
+                native_type_name=py_struct_name,
+                record_size=RecordSize.from_python_object(source_object),
+                pointer_type=PointerType.non_pointer,
+                intrusive_length_hint=None,
+            )
 
-        live_entrypoint_object = LivePythonCLevelObject.from_object(source_object, py_struct_type)
+        live_entrypoint_object = LivePythonCLevelObject.from_python_object(source_object,
+                                                                           descriptor)
 
         stack.append(live_entrypoint_object)
 
