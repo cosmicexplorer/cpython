@@ -39,7 +39,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+
+#ifndef __linux__
 #include <mach-o/getsect.h>
+#endif
 
 typedef struct _gc_runtime_state GCState;
 
@@ -1843,9 +1846,18 @@ static PyObject *gc_pdmp_write_allocation_report(PyObject *module) {
     return result;
 }
 
+#ifdef __linux__
+extern char etext, edata;
+#endif
+
 static PyObject *gc_pdmp_get_data_and_text_segment_starts(PyObject *module) {
+#ifdef __linux__
+    PyObject *etext_obj = PyLong_FromVoidPtr((void*)&etext);
+    PyObject *edata_obj = PyLong_FromVoidPtr((void*)&edata);
+#else
     PyObject *etext_obj = PyLong_FromVoidPtr((void*)get_etext());
-    PyObject *edata_obj = PyLong_FromVoidPtr((void*)get_edata());
+    PyObject *edata_obj = PyLong_FromVoidPtr((void *)get_edata());
+#endif
 
     PyObject *result = PyTuple_New(2);
     PyTuple_SET_ITEM(result, 0, etext_obj);

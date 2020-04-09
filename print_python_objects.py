@@ -1,6 +1,8 @@
 import dataclasses
 import glob
+import itertools
 import json
+import os
 import re
 import sys
 from collections import OrderedDict
@@ -226,11 +228,13 @@ class FileToParse:
 
                 if typedef_type.spelling == 'PyObject':
                     assert ob_type_offset is None
-                    assert underlying_type.spelling == 'struct _object'
+                    if underlying_type.spelling != 'struct _object':
+                        continue
                     ob_type_offset = underlying_type.get_offset('ob_type')
                 elif typedef_type.spelling == 'PyTypeObject':
                     assert tp_name_offset is None
-                    assert underlying_type.spelling == 'struct _typeobject'
+                    if underlying_type.spelling != 'struct _typeobject':
+                        continue
                     tp_name_offset = underlying_type.get_offset('tp_name')
 
             # Traverse struct declarations to find ones for each registered PyObject "subclass".
@@ -306,8 +310,11 @@ class FileToParse:
         )
 
 
-clang.Config.set_library_file('/usr/local/opt/llvm/lib/libclang.dylib')
-
+# FIXME: local hack!!!
+if os.uname().sysname == 'Darwin':
+    clang.Config.set_library_file('/usr/local/opt/llvm/lib/libclang.dylib')
+else:
+    clang.Config.set_library_file('/usr/lib/llvm-6.0/lib/libclang.so.1')
 
 index = clang.Index.create()
 
@@ -318,15 +325,21 @@ cpython_accumulated_knowledge = FileToParse(Path('Include/Python.h')).parse(inde
 
 all_files_to_parse = [
     FileToParse(Path(src))
-    for d in ['Objects', 'Python', 'Modules']
-    for src in glob.glob(f'{d}/*.c')
+    for src in itertools.chain(*[
+            glob.glob(pat)
+            for d in ['Objects', 'Modules', 'Python']
+            # NB: Why isn't this the same as **/*.c???????????
+            for pat in [f'{d}/*.c', f'{d}/**/*.c']
+    ])
+    # for src in itertools.chain(glob.glob('**/*.c'),
+    #                            glob.glob('**/*.h'))
 ]
 
 def parse_c_source_file(to_parse: FileToParse) -> CPythonKnowledge:
     try:
         return to_parse.parse(index)
     except Exception as e:
-        raise Exception(f'failed in file {src}: {e}') from e
+        raise Exception(f'failed in file {to_parse}: {e}') from e
 
 
 RUN_SERIAL = True

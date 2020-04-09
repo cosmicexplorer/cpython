@@ -39,6 +39,9 @@ def _unpack_n_longs(file_handle, n: int) -> Tuple[int, ...]:
     return struct.unpack('l' * n, file_handle.read(_SIZE_BYTES_LONG * n))
 
 
+_is_osx = os.uname().sysname == 'Darwin'
+
+
 class ByteConsistencyError(Exception):
     pass
 
@@ -580,8 +583,12 @@ class AllocationType(Enum):
 
 
 class StaticSymbolType(Enum):
-    text = '__TEXT'
-    data = '__DATA'
+    if _is_osx:
+        text = '__TEXT'
+        data = '__DATA'
+    else:
+        text = '.text'
+        data = '.data'
 
 
 @dataclass(frozen=True)
@@ -605,6 +612,13 @@ class LiveStaticSymbol:
 
 
 @dataclass(frozen=True)
+class StaticSectionsHeader:
+    dumped_text_start: FieldOffset
+    dumped_data_start: FieldOffset
+    possibly_parseable_static_symbols: List[str]
+
+
+@dataclass(frozen=True)
 class StaticAllocationReport:
     text_segment_start: PythonCLevelPointerLocation
     data_segment_start: PythonCLevelPointerLocation
@@ -622,55 +636,72 @@ class StaticAllocationReport:
                 size=data_entry.size)
         return None
 
-    # 0000000100002500 l     F __TEXT,__text  _freechildren
-    # 000000010027aa68 l     O __DATA,__data  _empty_keys_struct
-    _static_record_pattern = re.compile(r'^([0-9a-f]{16})[ \t]+l[ \t]+[FO][ \t]+(__TEXT|__DATA),(__[a-z]+)[ \t]+(.*)$')
+    @classmethod
+    def _parse_static_sections(
+            cls,
+            dumped_segments: List[str],
+    ) -> StaticSectionsHeader:
+        if _is_osx:
+            assert dumped_segments[0] == f'{sys.executable}:'
+            assert dumped_segments[1] == 'Sections:'
+            assert dumped_segments[2].startswith('Idx')
+
+            #   0 __text        001d44ae 0000000100001680 TEXT
+            dumped_text_segment = re.match(r'  0 __text        ([0-9a-f]{8}) ([0-9a-f]{16}) TEXT',
+                                           dumped_segments[3])
+            assert dumped_text_segment is not None
+            _dumped_text_size, dumped_text_start = dumped_text_segment.groups()
+            dumped_text_start = PythonCLevelPointerLocation(int(dumped_text_start, base=16))
+
+            #   9 __data        0003362d 0000000100269980 DATA
+            dumped_data_segment = re.match(r'  9 __data        ([0-9a-f]{8}) ([0-9a-f]{16}) DATA',
+                                           dumped_segments[12])
+            assert dumped_data_segment is not None
+            _dumped_data_size, dumped_data_start = dumped_data_segment.groups()
+            dumped_data_start = PythonCLevelPointerLocation(int(dumped_data_start, base=16))
+
+            assert dumped_segments[16] == 'SYMBOL TABLE:'
+
+            possibly_parseable_static_symbols = dumped_segments[17:]
+        else:
+            # 13 .text         00240732  000000000005c760  000000000005c760  0005c760  2**4
+            text_segment_pattern = re.compile(r'13 \.text[ \t]+[0-9a-f]+[ \t]+([0-9a-f]+)')
+            # 23 .data         00035df8  000000000057e000  000000000057e000  0037e000  2**5
+            data_segment_pattern = re.compile(r'23 \.data[ \t]+[0-9a-f]+[ \t]+([0-9a-f]+)')
+            for index, line in enumerate(dumped_segments):
+                if dumped_text_segment := text_segment_pattern.search(line):
+                    (dumped_text_start,) = dumped_text_segment.groups()
+                    dumped_text_start = PythonCLevelPointerLocation(int(dumped_text_start, base=16))
+                if dumped_data_segment := data_segment_pattern.search(line):
+                    (dumped_data_start,) = dumped_data_segment.groups()
+                    dumped_data_start = PythonCLevelPointerLocation(int(dumped_data_start, base=16))
+                if line == 'SYMBOL TABLE:':
+                    possibly_parseable_static_symbols = dumped_segments[(index + 1):]
+                    break
+
+        return StaticSectionsHeader(
+            dumped_text_start=dumped_text_start,
+            dumped_data_start=dumped_data_start,
+            possibly_parseable_static_symbols=possibly_parseable_static_symbols,
+        )
 
     @classmethod
-    def extract_from_executable(cls) -> 'StaticAllocationReport':
-        # Get the start of the text and data sections.
-        etext, edata = gc.pdmp_get_data_and_text_segment_starts()
-        text_segment_start = PythonCLevelPointerLocation(etext)
-        data_segment_start = PythonCLevelPointerLocation(edata)
+    def _parse_static_segment_record(
+        cls,
+        line: str,
+        text_segment_start: FieldOffset,
+        data_segment_start: FieldOffset,
+        live_text_segment_offset: FieldOffset,
+        live_data_segment_offset: FieldOffset,
+        next_line: Optional[str],
+    ) -> Optional[LiveStaticSymbol]:
+        if _is_osx:
+            # 0000000100002500 l     F __TEXT,__text  _freechildren
+            # 000000010027aa68 l     O __DATA,__data  _empty_keys_struct
+            _static_record_pattern = re.compile(r'^([0-9a-f]{16})[ \t]+l[ \t]+[FO][ \t]+(__TEXT|__DATA),(__[a-z]+)[ \t]+(.*)$')
+            if static_segment_record := _static_record_pattern.match(line):
+                hex_offset, symbol_type_str, secondary_name, symbol_name = tuple(static_segment_record.groups())
 
-        # Now, extract the records of allocations from the python executable.
-        dumped_segments = list(
-            subprocess.run(['objdump', '-macho', '-t', '-all-headers', sys.executable],
-                           capture_output=True,
-                           check=True)
-            .stdout
-            .decode()
-            .splitlines())
-
-        assert dumped_segments[0] == f'{sys.executable}:'
-        assert dumped_segments[1] == 'Sections:'
-        assert dumped_segments[2].startswith('Idx')
-
-        #   0 __text        001d44ae 0000000100001680 TEXT
-        dumped_text_segment = re.match(r'  0 __text        ([0-9a-f]{8}) ([0-9a-f]{16}) TEXT',
-                                       dumped_segments[3])
-        assert dumped_text_segment is not None
-        _dumped_text_size, dumped_text_start = dumped_text_segment.groups()
-        dumped_text_start = PythonCLevelPointerLocation(int(dumped_text_start, base=16))
-        live_text_segment_offset = text_segment_start - dumped_text_start
-
-        #   9 __data        0003362d 0000000100269980 DATA
-        dumped_data_segment = re.match(r'  9 __data        ([0-9a-f]{8}) ([0-9a-f]{16}) DATA',
-                                       dumped_segments[12])
-        assert dumped_data_segment is not None
-        _dumped_data_size, dumped_data_start = dumped_data_segment.groups()
-        dumped_data_start = PythonCLevelPointerLocation(int(dumped_data_start, base=16))
-        live_data_segment_offset = data_segment_start - dumped_data_start
-
-        assert dumped_segments[16] == 'SYMBOL TABLE:'
-
-        possibly_parseable_static_symbols = dumped_segments[17:]
-
-        text_allocation_report = {}
-        data_allocation_report = {}
-        for index, line in enumerate(possibly_parseable_static_symbols):
-            if static_segment_record := cls._static_record_pattern.match(line):
-                hex_offset, symbol_type_str, secondary, symbol_name = tuple(static_segment_record.groups())
                 symbol_type = StaticSymbolType(symbol_type_str)
                 offset = FieldOffset.parse_from_objdump_hex(hex_offset)
 
@@ -681,27 +712,98 @@ class StaticAllocationReport:
                     location = data_segment_start + live_data_segment_offset + offset
 
                 allocation_size = None
-                if index < len(possibly_parseable_static_symbols) - 1:
-                    next_line = possibly_parseable_static_symbols[index + 1]
-                    if next_record := cls._static_record_pattern.match(next_line):
-                        next_offset = FieldOffset.parse_from_objdump_hex(next_record.groups()[0])
-                        if next_offset.as_offset_in_bits() != 0:
-                            guessed_size = (next_offset - offset).as_offset_in_bits()
-                            if guessed_size >= 0:
-                                allocation_size = AllocationSize(guessed_size)
+                if next_line and (next_record := _static_record_pattern.match(next_line)):
+                    next_offset = FieldOffset.parse_from_objdump_hex(next_record.groups()[0])
+                    if next_offset.as_offset_in_bits() != 0:
+                        guessed_size = (next_offset - offset).as_offset_in_bits()
+                        if guessed_size >= 0:
+                            allocation_size = AllocationSize(guessed_size)
+            else:
+                return None
+        else:
+            # 00000000000ad0e0 l     F .text  00000000000000fa              dict_clear
+            # 0000000000588200 l     O .data  0000000000000030              empty_keys_struct
+            _static_record_pattern = re.compile(r'^([0-9a-f]{16})[ \t]+l[ \t]+[FO][ \t]+(\.text|\.data)[ \t]+([a-z]+)[ \t]+(.*)$')
+            if static_segment_record := _static_record_pattern.match(line):
+                hex_offset, symbol_type_str, _hex_idk, symbol_name = tuple(static_segment_record.groups())
+                secondary_name = None
 
-                symbol = LiveStaticSymbol(
-                    symbol_type=symbol_type,
-                    location=location,
-                    size=allocation_size,
-                    secondary=StaticSecondarySymbolType(secondary),
-                    name=StaticSymbolName(symbol_name),
-                )
+                symbol_type = StaticSymbolType(symbol_type_str)
+                offset = FieldOffset.parse_from_objdump_hex(hex_offset)
 
                 if symbol_type == StaticSymbolType.text:
-                    text_allocation_report[location] = symbol
+                    location = text_segment_start + live_text_segment_offset + offset
                 else:
-                    data_allocation_report[location] = symbol
+                    assert symbol_type == StaticSymbolType.data
+                    location = data_segment_start + live_data_segment_offset + offset
+
+                allocation_size = None
+                if next_line and (next_record := _static_record_pattern.match(next_line)):
+                    next_offset = FieldOffset.parse_from_objdump_hex(next_record.groups()[0])
+                    if next_offset.as_offset_in_bits() != 0:
+                        guessed_size = (next_offset - offset).as_offset_in_bits()
+                        if guessed_size >= 0:
+                            allocation_size = AllocationSize(guessed_size)
+            else:
+                return None
+
+        symbol = LiveStaticSymbol(
+            symbol_type=symbol_type,
+            location=location,
+            size=allocation_size,
+            secondary=(secondary_name and StaticSecondarySymbolType(secondary_name)),
+            name=StaticSymbolName(symbol_name),
+        )
+        return symbol
+
+    @classmethod
+    def extract_from_executable(cls) -> 'StaticAllocationReport':
+        # Get the start of the text and data sections.
+        etext, edata = gc.pdmp_get_data_and_text_segment_starts()
+        text_segment_start = PythonCLevelPointerLocation(etext)
+        data_segment_start = PythonCLevelPointerLocation(edata)
+
+        # Now, extract the records of allocations from the python executable.
+
+        platform_specific_objdump_arguments = (
+            ['-macho', '-all-headers']
+            if _is_osx else
+            ['--all-headers']
+        )
+
+        dumped_segments = list(
+            subprocess.run(['objdump', '-t',
+                            *platform_specific_objdump_arguments,
+                            sys.executable],
+                           capture_output=True,
+                           check=True)
+            .stdout
+            .decode()
+            .splitlines())
+
+        static_sections_header = cls._parse_static_sections(dumped_segments)
+        live_text_segment_offset = text_segment_start - static_sections_header.dumped_text_start
+        live_data_segment_offset = data_segment_start - static_sections_header.dumped_data_start
+        possibly_parseable_static_symbols = static_sections_header.possibly_parseable_static_symbols
+
+        text_allocation_report = {}
+        data_allocation_report = {}
+        for index, line in enumerate(possibly_parseable_static_symbols):
+            next_line = None
+            if index < len(possibly_parseable_static_symbols) - 1:
+                next_line = possibly_parseable_static_symbols[index + 1]
+            if symbol := cls._parse_static_segment_record(
+                line=line,
+                text_segment_start=text_segment_start,
+                data_segment_start=data_segment_start,
+                live_text_segment_offset=live_text_segment_offset,
+                live_data_segment_offset=live_data_segment_offset,
+                next_line=next_line,
+            ):
+                if symbol.symbol_type == StaticSymbolType.text:
+                    text_allocation_report[symbol.location] = symbol
+                else:
+                    data_allocation_report[symbol.location] = symbol
 
         return cls(
             text_segment_start=text_segment_start,
@@ -745,6 +847,7 @@ class RawAllocationReport:
         for cur_record_index in range(0, num_allocations):
             cur_offset = cur_record_index * single_record_size
             cur_record_bytes = all_allocations_all_bytes[cur_offset:(cur_offset + single_record_size)]
+
             cur_pointer, cur_nbytes = struct.unpack(
                 'PN',
                 cur_record_bytes)
