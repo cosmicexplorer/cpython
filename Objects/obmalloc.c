@@ -774,7 +774,7 @@ record_allocation(void *pointer, size_t nbytes) {
     if (UNLIKELY(state.records == NULL)) {
 #define ALLOCATION_FACTOR 100000
         state.size = 0;
-        state.records = malloc(sizeof(struct allocation_record) * ALLOCATION_FACTOR);
+        state.records = malloc(ALLOCATION_FACTOR * sizeof(struct allocation_record));
         state.capacity = ALLOCATION_FACTOR;
 #undef ALLOCATION_FACTOR
         set_allocation_record_state(state);
@@ -783,9 +783,11 @@ record_allocation(void *pointer, size_t nbytes) {
     if (UNLIKELY(state.size >= state.capacity)) {
         /* Reallocate for twice the size, copying over the original elements. */
         size_t new_capacity = state.capacity * 2;
-        size_t full_allocation_record_size = sizeof(struct allocation_record) * new_capacity;
-        struct allocation_record* new_allocations = malloc(full_allocation_record_size);
-        memcpy(new_allocations, state.records, state.capacity);
+        struct allocation_record *new_allocations =
+            malloc(new_capacity * sizeof(struct allocation_record));
+
+        memcpy(new_allocations, state.records, state.capacity * sizeof(struct allocation_record));
+
         free(state.records);
         state.records = new_allocations;
         state.capacity = new_capacity;

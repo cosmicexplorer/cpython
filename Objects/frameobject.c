@@ -632,8 +632,9 @@ frame_dealloc(PyFrameObject *f)
     Py_TRASHCAN_SAFE_BEGIN(f)
     /* Kill all local variables */
     valuestack = f->f_valuestack;
-    for (p = f->f_localsplus; p < valuestack; p++)
+    for (p = f->f_localsplus; p < valuestack; p++) {
         Py_CLEAR(*p);
+    }
 
     /* Free stack */
     if (f->f_stacktop != NULL) {
@@ -1218,4 +1219,3 @@ _PyFrame_DebugMallocStats(FILE *out)
                            "free PyFrameObject",
                            numfree, sizeof(PyFrameObject));
 }
-

@@ -1159,15 +1159,16 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
     int fd, flags = MAP_SHARED, prot = PROT_WRITE | PROT_READ;
     int devzero = -1;
     int access = (int)ACCESS_DEFAULT;
-    int initial_address = (int)NULL;
+    void* initial_address = NULL;
     static char *keywords[] = {"fileno", "length",
                                "flags", "prot",
                                "access", "offset", "initial_address", NULL};
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwdict, "in|iiii" _Py_PARSE_OFF_T, keywords,
+    if (!PyArg_ParseTupleAndKeywords(args, kwdict, "in|iii" _Py_PARSE_OFF_T "L", keywords,
                                      &fd, &map_size, &flags, &prot,
                                      &access, &offset, &initial_address))
         return NULL;
+    fprintf(stderr, "map_size: %ld, offset: %lld, initial_address: %p\n", map_size, offset, initial_address);
     if (map_size < 0) {
         PyErr_SetString(PyExc_OverflowError,
                         "memory mapped length must be positive");
@@ -1296,7 +1297,7 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
         }
     }
 
-    m_obj->data = mmap((void*) initial_address, map_size,
+    m_obj->data = mmap(initial_address, map_size,
                        prot, flags,
                        fd, offset);
 

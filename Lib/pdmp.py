@@ -92,7 +92,10 @@ class pdmp:
         flags = mmap.MAP_PRIVATE
         prot = mmap.PROT_READ | mmap.PROT_WRITE
         length = self._get_mapped_memory_length()
-        mapping = mmap.mmap(fd, length, flags, prot,
+        mapping = mmap.mmap(fileno=fd,
+                            length=length,
+                            flags=flags,
+                            prot=prot,
                             initial_address=initial_address.pointer_location)
 
         try:
@@ -482,24 +485,29 @@ class LivePythonCLevelObject:
                 record_size = self.record_size
             else:
                 assert self.pointer_depth.depth > 0
-            if self.record_size is None:
+                record_size = RecordSize(_SIZE_BYTES_LONG * _BITS_PER_BYTE)
+            if record_size is None:
                 record_size = RecordSize(_SIZE_BYTES_LONG * _BITS_PER_BYTE)
 
             allocation_record = db.allocation_report.get(self.volatile_memory_id)
-            allocation_size = (allocation_record and allocation_record.size)
+            allocation_size = (allocation_record and allocation_record.size.as_size_in_bits())
             if allocation_size is None:
                 # If we can't find the allocation, we assume it's intrusive. We require that the
                 # intrusive size hint was provided.
                 num_allocations = self.intrusive_length_hint
                 if num_allocations is None:
-                    logger.warning(f'Could not find an intrusive length hint, and allocation was not traced. Assuming 1...')
-                    num_allocations = IntrusiveLength(1)
+                    # num_allocations = IntrusiveLength(len(self.get_bytes()) // _SIZE_BYTES_POINTER)
+                    logger.warning(f'could not detect allocation at {self=}: assuming size 0')
                     return []
             else:
                 assert (allocation_size == 1) or (allocation_size % record_size.as_size_in_bits() == 0)
                 num_allocations = IntrusiveLength(allocation_size // record_size.as_size_in_bits())
 
-            assert num_allocations.get_length() > 0
+            if num_allocations.get_length() < 0:
+                # FIXME: hack!!! why is this happening??? we get a length of -1 sometimes??
+                num_allocations = IntrusiveLength(num_allocations.get_length() * -1)
+            elif num_allocations.get_length() == 0:
+                return []
 
             reduced_type_name = self._descriptor.native_type_name.dereference_one_pointer_level()
             new_descriptor = dataclasses.replace(
@@ -534,7 +542,7 @@ class LivePythonCLevelObject:
             if descriptor:
                 descriptor = dataclasses.replace(
                     descriptor,
-                    # record_size=field.record_size,
+                    record_size=field.record_size,
                     native_type_name=field.type_name,
                     pointer_type=PointerType.from_field_type(field.object_type),
                 )
@@ -956,6 +964,7 @@ class ObjectClosure:
     _live_object_list: List[LivePythonCLevelObject]
     _objects: Dict[PythonCLevelPointerLocation, LivePythonCLevelObject]
 
+    # _MMAP_ARBITRARY_STARTING_ADDRESS = FieldOffset(2 ** 62)
     _MMAP_ARBITRARY_STARTING_ADDRESS = FieldOffset(2 ** 31)
 
     @classmethod
@@ -1034,13 +1043,13 @@ class ObjectClosure:
                 original_pointer_value = PythonCLevelPointerLocation(original_pointer_value)
 
                 if relocated_pointer_target := relocations.get(original_pointer_value, None):
-                    new_pointer_value = struct.pack(
-                        'P',
-                        # FIXME: We are not doing correct bits/bytes nomenclature here -- we need to
-                        # make a separate "Byte" and "Bit" wrapper type!!!
-                        ((self.MMAP_START_ADDRESS().as_offset_in_bits() +
-                          (relocated_pointer_target.new_offset.as_offset_in_bits() *
-                           _BITS_PER_BYTE))))
+                    # FIXME: We are not doing correct bits/bytes nomenclature here -- we need to
+                    # make a separate "Byte" and "Bit" wrapper type!!!
+                    new_pointer_location = (
+                        (self.MMAP_START_ADDRESS().as_offset_in_bits() +
+                         (relocated_pointer_target.new_offset.as_offset_in_bits() *
+                          _BITS_PER_BYTE)))
+                    new_pointer_value = struct.pack('P', new_pointer_location)
                     assert len(new_pointer_value) == _SIZE_BYTES_POINTER
 
                     relocated_bytes += new_pointer_value
