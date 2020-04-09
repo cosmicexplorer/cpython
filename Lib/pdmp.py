@@ -952,6 +952,7 @@ class RelocatedObject:
 
 @dataclass
 class ObjectClosure:
+    _live_object_list: List[LivePythonCLevelObject]
     _objects: Dict[PythonCLevelPointerLocation, LivePythonCLevelObject]
 
     _MMAP_ARBITRARY_STARTING_ADDRESS = FieldOffset(2 ** 31)
@@ -961,6 +962,7 @@ class ObjectClosure:
         return cls._MMAP_ARBITRARY_STARTING_ADDRESS
 
     def __init__(self, objects: List[LivePythonCLevelObject]) -> None:
+        self._live_object_list = objects
         self._objects = {obj.volatile_memory_id: obj for obj in objects}
 
     def dumps(self, allocation_report: RawAllocationReport) -> bytes:
@@ -971,9 +973,9 @@ class ObjectClosure:
         # Line up all the heap-allocated python objects consecutively (without writing anything to
         # the file just yet).
         current_offset = FieldOffset(0)
-        offsets: Dict[PythonCLevelPointerLocation, FieldOffset] = {}
+        offsets = OrderedDict() # [PythonCLevelPointerLocation, FieldOffset]
 
-        for obj in self._objects.values():
+        for obj in self._live_object_list:
             allocation_record = allocation_report.get(obj.volatile_memory_id)
             if allocation_record and (allocation_record.allocation_type == AllocationType.static):
                 continue
@@ -996,7 +998,7 @@ class ObjectClosure:
         all_bytes += struct.pack('P', data_start.pointer_location)
 
         # (3) Relocate the objects!!
-        relocations: Dict[PythonCLevelPointerLocation, RelocatedObject] = {}
+        relocations = OrderedDict() # [PythonCLevelPointerLocation, RelocatedObject]
         object_initial_offset = FieldOffset(len(all_bytes))
         for original_id, basic_offset in offsets.items():
             new_offset = (object_initial_offset + basic_offset)
