@@ -44,61 +44,52 @@ class ByteConsistencyError(Exception):
 
 
 @dataclass(frozen=True)
-class LoadRelocationEntry:
-    original_volatile_memory_id: int
-    base_offset: int
-    extent: int
-    referents: Tuple[int, ...]
-
-    def read_source_object_bytes(self, file_handle) -> bytes:
-        return file_handle.read(self.extent)
-
-
-@dataclass(frozen=True)
 class pdmp:
     file_path: Path
 
     def _get_mapped_memory_length(self) -> int:
         return os.stat(self.file_path).st_size
 
-    def load(self) -> Any:
-        with self._read_handle() as read_mmap:
-            read_mmap.seek(0)
-            (num_objects_dumped,) = _unpack_n_longs(read_mmap, 1)
+    @contextmanager
+    def load(self, static_report: 'StaticAllocationReport'):
+        with self._acquire_write_file_handle(truncate=False) as file_handle:
+            ### LET'S READ SOME BYTES!!!
+            # (1-2) Read the size of the first object, the etext pointer, and the edata pointer.
+            (mmap_start_address, etext_value, edata_value) = struct.unpack(
+                'PPP',
+                file_handle.read(_SIZE_BYTES_POINTER * 3))
 
-            relocation_entries: List[LoadRelocationEntry] = []
-            for _ in range(num_objects_dumped):
-                volatile_memory_id, offset, extent, num_refs = _unpack_n_longs(read_mmap, 4)
-                referents = _unpack_n_longs(read_mmap, num_refs)
-                entry = LoadRelocationEntry(
-                    original_volatile_memory_id=volatile_memory_id,
-                    base_offset=offset,
-                    extent=extent,
-                    referents=referents,
-                )
-                relocation_entries.append(entry)
+            initial_address = PythonCLevelPointerLocation(mmap_start_address)
+            hardcoded_start_address = PythonCLevelPointerLocation(ObjectClosure.MMAP_START_ADDRESS().as_offset_in_bits())
+            assert initial_address == hardcoded_start_address, f'{initial_address=} from {self=} did not match hardcoded address {hardcoded_start_address=}'
 
-            end_of_entries_offset = read_mmap.tell()
+            etext = PythonCLevelPointerLocation(etext_value)
+            assert etext == static_report.text_segment_start, f'etext value from pdump differed: {etext=} vs {static_report.text_segment_start=}'
+            edata = PythonCLevelPointerLocation(edata_value)
+            assert edata == static_report.data_segment_start, f'edata value from pdump differed: {edata=} vs {static_report.data_segment_start=}'
 
-            return relocation_entries
+            with self._open_private_write_mapping(file_handle.fileno(),
+                                                  initial_address=initial_address) as write_mapping:
+                reloaded_object = write_mapping.read_object_at(file_handle.tell())
+                yield reloaded_object
 
     @contextmanager
-    def _acquire_write_file_handle(self, *, truncate: bool = False):
+    def _acquire_write_file_handle(self, *, truncate: bool):
         mode = 'wb' if truncate else 'r+b'
         file_handle = open(self.file_path, mode)
 
         try:
-            file_handle.seek(0)
             yield file_handle
         finally:
             file_handle.close()
 
     @contextmanager
-    def _open_write_mapping(self, fd: int):
+    def _open_private_write_mapping(self, fd: int, initial_address: 'PythonCLevelPointerLocation'):
         flags = mmap.MAP_PRIVATE
-        prot = mmap.PROT_WRITE
+        prot = mmap.PROT_READ | mmap.PROT_WRITE
         length = self._get_mapped_memory_length()
-        mapping = mmap.mmap(fd, length, flags, prot)
+        mapping = mmap.mmap(fd, length, flags, prot,
+                            initial_address=initial_address.pointer_location)
 
         try:
             yield mapping
@@ -109,7 +100,7 @@ class pdmp:
         object_closure = db.traverse_reachable_objects(source_object)
 
         file_contents = object_closure.dumps(db.allocation_report)
-        with self._acquire_write_file_handle() as file_handle:
+        with self._acquire_write_file_handle(truncate=True) as file_handle:
             file_handle.write(file_contents)
 
         return object_closure
@@ -336,6 +327,9 @@ class PythonCLevelType(Enum):
 class PythonCLevelPointerLocation:
     pointer_location: int
 
+    def __post_init__(self) -> None:
+        assert isinstance(self.pointer_location, int)
+
     @classmethod
     def from_python_object(cls, source_object: Any) -> 'PythonCLevelPointerLocation':
         return cls(id(source_object))
@@ -494,7 +488,6 @@ class LivePythonCLevelObject:
                 # intrusive size hint was provided.
                 num_allocations = self.intrusive_length_hint
                 if num_allocations is None:
-                    # import pdb; pdb.set_trace()
                     logger.warn(f'Could not find an intrusive length hint, and allocation was not traced. Assuming 1...')
                     num_allocations = IntrusiveLength(1)
                     return []
@@ -587,16 +580,8 @@ class AllocationType(Enum):
 
 
 class StaticSymbolType(Enum):
-    text = 'text'
-    data = 'data'
-
-    @classmethod
-    def parse_from_segment_descriptor(cls, segment_descriptor: str) -> 'StaticSymbolType':
-        if segment_descriptor == '__TEXT,__text':
-            return cls.text
-        if segment_descriptor == '__DATA,__data':
-            return cls.data
-        raise TypeError(f'{segment_descriptor=} was not a valid static symbol type!')
+    text = '__TEXT'
+    data = '__DATA'
 
 
 @dataclass(frozen=True)
@@ -605,10 +590,17 @@ class StaticSymbolName:
 
 
 @dataclass(frozen=True)
+class StaticSecondarySymbolType:
+    """TODO: what does this part mean??"""
+    symbol_type_name: str
+
+
+@dataclass(frozen=True)
 class LiveStaticSymbol:
     symbol_type: StaticSymbolType
     location: PythonCLevelPointerLocation
     size: Optional[AllocationSize]
+    secondary: StaticSecondarySymbolType
     name: StaticSymbolName
 
 
@@ -632,7 +624,7 @@ class StaticAllocationReport:
 
     # 0000000100002500 l     F __TEXT,__text  _freechildren
     # 000000010027aa68 l     O __DATA,__data  _empty_keys_struct
-    _static_record_pattern = re.compile(r'^([0-9]{16}) l     [FO] (__TEXT__,__text|__DATA,__data)\t(.*)$')
+    _static_record_pattern = re.compile(r'^([0-9a-f]{16})[ \t]+l[ \t]+[FO][ \t]+(__TEXT|__DATA),(__[a-z]+)[ \t]+(.*)$')
 
     @classmethod
     def extract_from_executable(cls) -> 'StaticAllocationReport':
@@ -678,8 +670,8 @@ class StaticAllocationReport:
         data_allocation_report = {}
         for index, line in enumerate(possibly_parseable_static_symbols):
             if static_segment_record := cls._static_record_pattern.match(line):
-                hex_offset, symbol_type_str, symbol_name = tuple(static_segment_record.groups())
-                symbol_type = StaticSymbolType.parse_from_segment_descriptor(symbol_type_str)
+                hex_offset, symbol_type_str, secondary, symbol_name = tuple(static_segment_record.groups())
+                symbol_type = StaticSymbolType(symbol_type_str)
                 offset = FieldOffset.parse_from_objdump_hex(hex_offset)
 
                 if symbol_type == StaticSymbolType.text:
@@ -702,6 +694,7 @@ class StaticAllocationReport:
                     symbol_type=symbol_type,
                     location=location,
                     size=allocation_size,
+                    secondary=StaticSecondarySymbolType(secondary),
                     name=StaticSymbolName(symbol_name),
                 )
 
@@ -889,25 +882,24 @@ class ObjectClosure:
             current_offset += obj.get_bytes()
 
         ### LET'S WRITE SOME BYTES!!!
-        # (1) Write out the size of the first object. This will be the entry point when the pdmp
-        # file is loaded, so we don't need to record any other object sizes.
-        source_object = list(self._objects.values())[0]
-        all_bytes += _pack_longs(len(source_object.get_bytes()))
+        # (1) Write out the mmap offset that the file should be loaded at!
+        all_bytes += struct.pack('P', self.MMAP_START_ADDRESS().as_offset_in_bits())
 
         # (2) Write out the start of the text and data segments. We will validate that these are the
         # same when we load the pdmp file.
         text_start = allocation_report.static_report.text_segment_start
-        all_bytes += _pack_longs(text_start.pointer_location)
+        all_bytes += struct.pack('P', text_start.pointer_location)
         data_start = allocation_report.static_report.data_segment_start
-        all_bytes += _pack_longs(data_start.pointer_location)
+        all_bytes += struct.pack('P', data_start.pointer_location)
 
         # (3) Relocate the objects!!
         relocations: Dict[PythonCLevelPointerLocation, RelocatedObject] = {}
         object_initial_offset = FieldOffset(len(all_bytes))
         for original_id, basic_offset in offsets.items():
+            new_offset = (object_initial_offset + basic_offset)
             entry = RelocatedObject(
                 original=self._objects[original_id],
-                new_offset=(object_initial_offset + basic_offset),
+                new_offset=new_offset,
             )
             relocations[original_id] = entry
             all_bytes += entry.original.get_bytes()
@@ -917,30 +909,33 @@ class ObjectClosure:
         # (4) Within the set of reachable objects, rewrite the (now-relocated, but previously)
         # heap-allocated pointers to point amongst themselves.
         for relocated_object in relocations.values():
-            if relocated_object.original.is_pointer():
-                relocated_bit_offset = relocated_object.new_offset.as_offset_in_bits()
-                assert relocated_bit_offset % _BITS_PER_BYTE == 0
-                byte_offset = relocated_bit_offset // _BITS_PER_BYTE
+            if not relocated_object.original.is_pointer():
+                continue
 
-                original_bytes = relocated_object.original.get_bytes()
-                assert len(original_bytes) % _SIZE_BYTES_POINTER == 0
+            # FIXME: We are not doing correct bits/bytes nomenclature here -- we need to make a
+            # separate "Byte" and "Bit" wrapper type!!!
+            byte_offset = relocated_object.new_offset.as_offset_in_bits()
 
-                relocated_bytes = b''
-                for array_index in range(len(original_bytes) // _SIZE_BYTES_POINTER):
-                    cur_within_array_offset = _SIZE_BYTES_POINTER * array_index
-                    cur_pointer_bytes = original_bytes[cur_within_array_offset:(cur_within_array_offset + _SIZE_BYTES_POINTER)]
-                    original_pointer_value = PythonCLevelPointerLocation(
-                        struct.unpack('P', cur_pointer_bytes))
+            original_bytes = relocated_object.original.get_bytes()
+            assert len(original_bytes) % _SIZE_BYTES_POINTER == 0
 
-                    if relocated_pointer_target := relocations.get(original_pointer_value, None):
-                        new_pointer_value = struct.pack(
-                            'P',
-                            (self.MMAP_START_ADDRESS +
-                             relocated_pointer_target.new_offset.as_offset_in_bits()))
-                        assert len(new_pointer_value) == 8
+            relocated_bytes = b''
+            for array_index in range(len(original_bytes) // _SIZE_BYTES_POINTER):
+                cur_within_array_offset = _SIZE_BYTES_POINTER * array_index
+                cur_pointer_bytes = original_bytes[cur_within_array_offset:(cur_within_array_offset + _SIZE_BYTES_POINTER)]
 
-                        relocated_bytes += new_pointer_value
+                (original_pointer_value,) = struct.unpack('P', cur_pointer_bytes)
+                original_pointer_value = PythonCLevelPointerLocation(original_pointer_value)
 
-                all_bytes_mutable[byte_offset:(byte_offset + len(original_bytes))] = relocated_bytes
+                if relocated_pointer_target := relocations.get(original_pointer_value, None):
+                    new_pointer_value = struct.pack(
+                        'P',
+                        ((self.MMAP_START_ADDRESS() + relocated_pointer_target.new_offset)
+                         .as_offset_in_bits()))
+                    assert len(new_pointer_value) == _SIZE_BYTES_POINTER
+
+                    relocated_bytes += new_pointer_value
+
+            all_bytes_mutable[byte_offset:(byte_offset + len(original_bytes))] = relocated_bytes
 
         return bytes(all_bytes_mutable)

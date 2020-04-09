@@ -793,6 +793,19 @@ mmap_madvise_method(mmap_object *self, PyObject *args)
 }
 #endif // HAVE_MADVISE
 
+
+PyDoc_STRVAR(mmap_read_object_at_doc,
+"read_object_at(pos)\n"
+"\n"
+"Read a PyObject* from the position in the mapping.");
+
+static PyObject *mmap_read_object_at(mmap_object *self, PyObject *args, PyObject *kwds) {
+    CHECK_VALID(NULL);
+    PyObject *offset_object = PyTuple_GetItem(args, 0);
+    long offset = PyLong_AsLong(offset_object);
+    return (PyObject*)&self->data[offset];
+}
+
 static struct PyMethodDef mmap_object_methods[] = {
     {"close",           (PyCFunction) mmap_close_method,        METH_NOARGS},
     {"find",            (PyCFunction) mmap_find_method,         METH_VARARGS},
@@ -803,6 +816,7 @@ static struct PyMethodDef mmap_object_methods[] = {
 #endif
     {"move",            (PyCFunction) mmap_move_method,         METH_VARARGS},
     {"read",            (PyCFunction) mmap_read_method,         METH_VARARGS},
+    {"read_object_at",  (PyCFunction) mmap_read_object_at,      METH_VARARGS, mmap_read_object_at_doc},
     {"read_byte",       (PyCFunction) mmap_read_byte_method,    METH_NOARGS},
     {"readline",        (PyCFunction) mmap_read_line_method,    METH_NOARGS},
     {"resize",          (PyCFunction) mmap_resize_method,       METH_VARARGS},
@@ -1145,13 +1159,14 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
     int fd, flags = MAP_SHARED, prot = PROT_WRITE | PROT_READ;
     int devzero = -1;
     int access = (int)ACCESS_DEFAULT;
+    int initial_address = (int)NULL;
     static char *keywords[] = {"fileno", "length",
                                "flags", "prot",
-                               "access", "offset", NULL};
+                               "access", "offset", "initial_address", NULL};
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwdict, "in|iii" _Py_PARSE_OFF_T, keywords,
+    if (!PyArg_ParseTupleAndKeywords(args, kwdict, "in|iiii" _Py_PARSE_OFF_T, keywords,
                                      &fd, &map_size, &flags, &prot,
-                                     &access, &offset))
+                                     &access, &offset, &initial_address))
         return NULL;
     if (map_size < 0) {
         PyErr_SetString(PyExc_OverflowError,
@@ -1281,7 +1296,7 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
         }
     }
 
-    m_obj->data = mmap(NULL, map_size,
+    m_obj->data = mmap((void*) initial_address, map_size,
                        prot, flags,
                        fd, offset);
 
