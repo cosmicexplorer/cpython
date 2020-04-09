@@ -940,7 +940,8 @@ type_repr(PyTypeObject *type)
     name = type_qualname(type, NULL);
     if (name == NULL) {
         Py_XDECREF(mod);
-        return NULL;
+        rtn = NULL;
+        goto done;
     }
 
     if (mod != NULL && !_PyUnicode_EqualToASCIIId(mod, &PyId_builtins))
@@ -950,6 +951,12 @@ type_repr(PyTypeObject *type)
 
     Py_XDECREF(mod);
     Py_DECREF(name);
+
+done:
+    if (!rtn) {
+      rtn = PyUnicode_FromFormat("<class (!) '%s'>", type->tp_name);
+    }
+
     return rtn;
 }
 

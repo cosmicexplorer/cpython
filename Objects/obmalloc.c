@@ -741,7 +741,7 @@ struct allocation_record_state {
     struct allocation_record* records;
 };
 
-inline struct allocation_record_state get_allocation_record_state(void) {
+struct allocation_record_state get_allocation_record_state(void) {
     int size = _Py_atomic_load(&_allocation_records_size_global);
     assert(size >= 0);
 
@@ -758,7 +758,7 @@ inline struct allocation_record_state get_allocation_record_state(void) {
     return ret;
 }
 
-inline void set_allocation_record_state(struct allocation_record_state state) {
+void set_allocation_record_state(struct allocation_record_state state) {
     assert(state.size < INT_MAX);
     assert(state.capacity < INT_MAX);
 

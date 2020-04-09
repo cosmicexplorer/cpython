@@ -1444,6 +1444,10 @@ PyDict_GetItemWithError(PyObject *op, PyObject *key)
     PyDictObject*mp = (PyDictObject *)op;
     PyObject *value;
 
+    if (!op) {
+        return NULL;
+    }
+
     if (!PyDict_Check(op)) {
         PyErr_BadInternalCall();
         return NULL;

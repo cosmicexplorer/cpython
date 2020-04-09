@@ -397,6 +397,9 @@ PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
 
 static inline void _Py_INCREF(PyObject *op)
 {
+    if (!op) {
+        return;
+    }
 #ifdef Py_REF_DEBUG
     _Py_RefTotal++;
 #endif

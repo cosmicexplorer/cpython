@@ -74,6 +74,7 @@ class pdmp:
             with self._open_private_write_mapping(file_handle.fileno(),
                                                   initial_address=initial_address) as write_mapping:
                 reloaded_object = write_mapping.read_object_at(file_handle.tell())
+                # import pdb; pdb.set_trace()
                 yield reloaded_object
 
     @contextmanager
@@ -491,7 +492,7 @@ class LivePythonCLevelObject:
                 # intrusive size hint was provided.
                 num_allocations = self.intrusive_length_hint
                 if num_allocations is None:
-                    logger.warn(f'Could not find an intrusive length hint, and allocation was not traced. Assuming 1...')
+                    logger.warning(f'Could not find an intrusive length hint, and allocation was not traced. Assuming 1...')
                     num_allocations = IntrusiveLength(1)
                     return []
             else:
@@ -1035,8 +1036,11 @@ class ObjectClosure:
                 if relocated_pointer_target := relocations.get(original_pointer_value, None):
                     new_pointer_value = struct.pack(
                         'P',
-                        ((self.MMAP_START_ADDRESS() + relocated_pointer_target.new_offset)
-                         .as_offset_in_bits()))
+                        # FIXME: We are not doing correct bits/bytes nomenclature here -- we need to
+                        # make a separate "Byte" and "Bit" wrapper type!!!
+                        ((self.MMAP_START_ADDRESS().as_offset_in_bits() +
+                          (relocated_pointer_target.new_offset.as_offset_in_bits() *
+                           _BITS_PER_BYTE))))
                     assert len(new_pointer_value) == _SIZE_BYTES_POINTER
 
                     relocated_bytes += new_pointer_value
