@@ -2,6 +2,8 @@
 #include "pycore_pymem.h"         // _PyTraceMalloc_Config
 #include "pycore_code.h"         // stats
 
+#include "obmalloc.h"
+
 #include <stdbool.h>
 #include <stdlib.h>               // malloc()
 
@@ -98,7 +100,9 @@ _PyMem_RawMalloc(void *Py_UNUSED(ctx), size_t size)
        To solve these problems, allocate an extra byte. */
     if (size == 0)
         size = 1;
-    return malloc(size);
+    void * result = malloc(size);
+    record_allocation(result, size);
+    return result;
 }
 
 static void *
@@ -112,7 +116,10 @@ _PyMem_RawCalloc(void *Py_UNUSED(ctx), size_t nelem, size_t elsize)
         nelem = 1;
         elsize = 1;
     }
-    return calloc(nelem, elsize);
+    void * result = calloc(nelem, elsize);
+    size_t nbytes = nelem * elsize;
+    record_allocation(result, nbytes);
+    return result;
 }
 
 static void *
@@ -120,7 +127,9 @@ _PyMem_RawRealloc(void *Py_UNUSED(ctx), void *ptr, size_t size)
 {
     if (size == 0)
         size = 1;
-    return realloc(ptr, size);
+    void* result = realloc(ptr, size);
+    record_allocation(result, size);
+    return result;
 }
 
 static void
@@ -168,7 +177,9 @@ _PyObject_ArenaMunmap(void *Py_UNUSED(ctx), void *ptr, size_t size)
 static void *
 _PyObject_ArenaMalloc(void *Py_UNUSED(ctx), size_t size)
 {
-    return malloc(size);
+    void* result = malloc(size);
+    record_allocation(result, size);
+    return result;
 }
 
 static void
@@ -752,6 +763,95 @@ PyObject_Free(void *ptr)
 #  define UNLIKELY(value) (value)
 #  define LIKELY(value) (value)
 #endif
+
+
+static _Py_atomic_int _allocation_records_size_global = {0};
+static _Py_atomic_int _allocation_records_capacity_global = {0};
+static _Py_atomic_address _all_allocation_records_global = {0};
+
+struct allocation_record_state {
+    size_t size;
+    size_t capacity;
+    struct allocation_record* records;
+};
+
+struct allocation_record_state get_allocation_record_state(void) {
+    int size = _Py_atomic_load(&_allocation_records_size_global);
+    assert(size >= 0);
+
+    int capacity = _Py_atomic_load(&_allocation_records_capacity_global);
+    assert(capacity >= 0);
+
+    struct allocation_record* records = _Py_atomic_load(&_all_allocation_records_global);
+
+    struct allocation_record_state ret = {
+        .size = (size_t)size,
+        .capacity = (size_t)capacity,
+        .records = records,
+    };
+    return ret;
+}
+
+void set_allocation_record_state(struct allocation_record_state state) {
+    assert(state.size < INT_MAX);
+    assert(state.capacity < INT_MAX);
+
+    _Py_atomic_store(&_allocation_records_size_global, state.size);
+    _Py_atomic_store(&_allocation_records_capacity_global, state.capacity);
+    _Py_atomic_store(&_all_allocation_records_global, state.records);
+}
+
+void *
+record_allocation(void *pointer, size_t nbytes) {
+    struct allocation_record_state state = get_allocation_record_state();
+
+    if (UNLIKELY(state.records == NULL)) {
+#define ALLOCATION_FACTOR 100000
+        state.size = 0;
+        state.records = malloc(ALLOCATION_FACTOR * sizeof(struct allocation_record));
+        state.capacity = ALLOCATION_FACTOR;
+#undef ALLOCATION_FACTOR
+        set_allocation_record_state(state);
+    }
+
+    if (UNLIKELY(state.size >= state.capacity)) {
+        /* Reallocate for twice the size, copying over the original elements. */
+        size_t new_capacity = state.capacity * 2;
+        struct allocation_record *new_allocations =
+            malloc(new_capacity * sizeof(struct allocation_record));
+
+        memcpy(new_allocations, state.records, state.capacity * sizeof(struct allocation_record));
+
+        free(state.records);
+        state.records = new_allocations;
+        state.capacity = new_capacity;
+        new_allocations = NULL;
+    }
+
+    /* NB: Increment the `allocation_records_size` value here. */
+    struct allocation_record *cur_record = &state.records[state.size++];
+    cur_record->pointer = pointer;
+    cur_record->nbytes = nbytes;
+
+    set_allocation_record_state(state);
+
+    return pointer;
+}
+
+struct all_allocations_report report_all_allocations(void) {
+    struct allocation_record_state state = get_allocation_record_state();
+
+    size_t full_allocation_record_size = sizeof(struct allocation_record) * state.size;
+    struct allocation_record* allocations_report = malloc(full_allocation_record_size);
+    memcpy(allocations_report, state.records, full_allocation_record_size);
+    struct all_allocations_report report = {.all_allocations = allocations_report,
+                                            .num_allocations = state.size};
+    return report;
+}
+
+void free_all_allocations_report(struct all_allocations_report *report) {
+    free(report->all_allocations);
+}
 
 #ifdef WITH_PYMALLOC
 
@@ -1989,7 +2089,7 @@ pymalloc_alloc(void *Py_UNUSED(ctx), size_t nbytes)
         bp = allocate_from_new_pool(size);
     }
 
-    return (void *)bp;
+    return record_allocation((void *)bp, size);
 }
 
 

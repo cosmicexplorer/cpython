@@ -29,8 +29,19 @@
 #include "pycore_interp.h"      // PyInterpreterState.gc
 #include "pycore_object.h"
 #include "pycore_pyerrors.h"
+#include "pycore_pymem.h"
 #include "pycore_pystate.h"     // _PyThreadState_GET()
 #include "pydtrace.h"
+
+#include "Objects/dict-common.h"
+#include "obmalloc.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+
+#ifndef __linux__
+#include <mach-o/getsect.h>
+#endif
 
 typedef struct _gc_runtime_state GCState;
 
@@ -1947,6 +1958,34 @@ gc_get_freeze_count_impl(PyObject *module)
     return gc_list_size(&gcstate->permanent_generation.head);
 }
 
+static PyObject *gc_pdmp_write_allocation_report(PyObject *module) {
+    struct all_allocations_report report = report_all_allocations();
+    PyObject* result = PyBytes_FromStringAndSize((const char *)report.all_allocations,
+                                                 (sizeof(struct allocation_record) * report.num_allocations));
+    /* FIXME: we are now leaking!!!!! */
+    /* free_all_allocations_report(&report); */
+    return result;
+}
+
+#ifdef __linux__
+extern char etext, edata;
+#endif
+
+static PyObject *gc_pdmp_get_data_and_text_segment_starts(PyObject *module) {
+#ifdef __linux__
+    PyObject *etext_obj = PyLong_FromVoidPtr((void*)&etext);
+    PyObject *edata_obj = PyLong_FromVoidPtr((void*)&edata);
+#else
+    PyObject *etext_obj = PyLong_FromVoidPtr((void*)get_etext());
+    PyObject *edata_obj = PyLong_FromVoidPtr((void *)get_edata());
+#endif
+
+    PyObject *result = PyTuple_New(2);
+    PyTuple_SET_ITEM(result, 0, etext_obj);
+    PyTuple_SET_ITEM(result, 1, edata_obj);
+
+    return result;
+}
 
 PyDoc_STRVAR(gc__doc__,
 "This module provides access to the garbage collector for reference cycles.\n"
@@ -1991,6 +2030,8 @@ static PyMethodDef GcMethods[] = {
     GC_FREEZE_METHODDEF
     GC_UNFREEZE_METHODDEF
     GC_GET_FREEZE_COUNT_METHODDEF
+    {"pdmp_write_allocation_report", (PyCFunction)gc_pdmp_write_allocation_report, METH_NOARGS, "aaa"},
+    {"pdmp_get_data_and_text_segment_starts", (PyCFunction)gc_pdmp_get_data_and_text_segment_starts, METH_NOARGS, "bbb"},
     {NULL,      NULL}           /* Sentinel */
 };
 
@@ -2273,6 +2314,8 @@ _PyObject_GC_Link(PyObject *op)
         gc_collect_generations(tstate);
         gcstate->collecting = 0;
     }
+    PyObject *op = FROM_GC(g);
+    return record_allocation(op, basicsize);
 }
 
 static PyObject *
