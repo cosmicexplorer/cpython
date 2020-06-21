@@ -1197,7 +1197,7 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
 
     if (!PyArg_ParseTupleAndKeywords(args, kwdict, "in|iii" _Py_PARSE_OFF_T "L", keywords,
                                      &fd, &map_size, &flags, &prot,
-                                     &access, &offset))
+                                     &access, &offset, &initial_address))
         return NULL;
     fprintf(stderr, "map_size: %ld, offset: %lld, initial_address: %p\n", map_size, offset, initial_address);
 
@@ -1333,7 +1333,7 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
 #error "linux has no MAP_FIXED equivalent!"
 #else
     if (initial_address) {
-      flags = MAP_FIXED;
+      flags |= MAP_FIXED;
     }
     m_obj->data = mmap(initial_address, map_size,
                        prot, flags,

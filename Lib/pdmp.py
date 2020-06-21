@@ -417,15 +417,10 @@ class LivePythonCLevelObject:
 
         logger.info(f'attempted read at {id=} of size {record_size=}')
         logger.warning(f'attempted read at {id=} of size {record_size=}')
-        import pdb; pdb.set_trace()
-        allocation_report.validate_attempted_process_memory_read(
+        # import pdb; pdb.set_trace()
+        object_bytes = allocation_report.validate_attempted_process_memory_read(
             start=id.pointer_location,
             length=record_size.as_size_in_bits(),
-        )
-
-        object_bytes = gc.pdmp_write_relocatable_object(
-            id.pointer_location,
-            record_size.as_size_in_bits(),
         )
 
         if isinstance(descriptor, LibclangNativeObjectDescriptor):
@@ -507,10 +502,10 @@ class LivePythonCLevelObject:
                 # intrusive size hint was provided.
                 num_allocations = self.intrusive_length_hint
                 if num_allocations is None:
-                    num_allocations = IntrusiveLength(1)
+                    # num_allocations = IntrusiveLength(1)
                     # num_allocations = IntrusiveLength(len(self.get_bytes()) // _SIZE_BYTES_POINTER)
-                    logger.warning(f'could not detect allocation at {self=}: assuming size 1')
-                    # return []
+                    logger.warning(f'could not detect allocation at {self=}: assuming size 0')
+                    return []
             else:
                 assert (allocation_size == 1) or (allocation_size % record_size.as_size_in_bits() == 0)
                 num_allocations = IntrusiveLength(allocation_size // record_size.as_size_in_bits())
@@ -718,11 +713,10 @@ class StaticAllocationReport:
             offset = FieldOffset.parse_from_objdump_hex(hex_offset)
 
             if symbol_type == StaticSymbolType.text:
-                location = live_text_segment_offset + offset
+                location = text_segment_start + live_text_segment_offset + offset
             else:
                 assert symbol_type == StaticSymbolType.data
-                location = live_data_segment_offset + offset
-            location = PythonCLevelPointerLocation(location.as_offset_in_bits())
+                location = data_segment_start + live_data_segment_offset + offset
 
             allocation_size = None
             if next_line and (next_record := _static_record_pattern.match(next_line)):
@@ -829,15 +823,15 @@ class RawAllocationReport:
             self.all_conceivable_allocations.keys()
         ))
 
-    def validate_attempted_process_memory_read(self, start: int, length: int) -> None:
+    def validate_attempted_process_memory_read(self, start: int, length: int) -> bytes:
         assert len(self._all_allocation_starts) > 0
         assert start > 0
         assert length > 0
 
         if start < self._all_allocation_starts[0]:
-            # logger.exception(InvalidAttemptedProcessMemoryRead(f'{start=} is less than minimum allocation start {self._all_allocation_starts[0]=}'))
-            # return
-            raise InvalidAttemptedProcessMemoryRead(f'{start=} is less than minimum allocation start {self._all_allocation_starts[0]=}')
+            logger.exception(InvalidAttemptedProcessMemoryRead(f'{start=} is less than minimum allocation start {self._all_allocation_starts[0]=}'))
+            return gc.pdmp_write_relocatable_object(start, length)
+            # raise InvalidAttemptedProcessMemoryRead(f'{start=} is less than minimum allocation start {self._all_allocation_starts[0]=}')
 
         greatest_allocation_start = self._all_allocation_starts[0]
         for maybe_start in self._all_allocation_starts:
@@ -852,8 +846,13 @@ class RawAllocationReport:
         desired_end = start + length
 
         # import pdb; pdb.set_trace()
-        if desired_end > allocation_end:
-            raise InvalidAttemptedProcessMemoryRead(f'{length=} is greater than the known allocated region of size {allocation_size.as_size_in_bits()=}')
+        if desired_end <= allocation_end:
+            return gc.pdmp_write_relocatable_object(start, length)
+        if start >= allocation_end:
+            raise InvalidAttemptedProcessMemoryRead(f'{length=} is greater than the known allocated region of size {allocation_size.as_size_in_bits()=} ({loc=}, {start=})')
+        raise NotImplementedError('oops!')
+        leftover = allocation_end - start
+        return gc.pdmp_write_relocatable_object(start, leftover)
 
     def get(self, id: PythonCLevelPointerLocation) -> Optional[TrackedAllocation]:
         if live_record_size := self.records.get(id, None):
@@ -964,7 +963,7 @@ class LibclangDatabase:
                 intrusive_length_hint=None,
             )
 
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         live_entrypoint_object = LivePythonCLevelObject.from_python_object(
             source_object,
             descriptor,
@@ -999,7 +998,7 @@ class ObjectClosure:
     _objects: Dict[PythonCLevelPointerLocation, LivePythonCLevelObject]
 
     # _MMAP_ARBITRARY_STARTING_ADDRESS = FieldOffset(2 ** 62)
-    _MMAP_ARBITRARY_STARTING_ADDRESS = FieldOffset(2 ** 31)
+    _MMAP_ARBITRARY_STARTING_ADDRESS = FieldOffset(2 ** 43)
 
     @classmethod
     def MMAP_START_ADDRESS(cls) -> FieldOffset:
