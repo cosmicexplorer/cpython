@@ -1020,7 +1020,10 @@ class ObjectClosure:
         current_offset = FieldOffset(0)
         offsets: Dict[PythonCLevelPointerLocation, FieldOffset] = OrderedDict()
 
+        all_objects_filename = 'asdf.txt'
+        outf = open(all_objects_filename, 'w')
         for obj in self._live_object_list:
+            outf.write(str(obj) + '\n\n')
             allocation_record = allocation_report.get(obj.volatile_memory_id)
             if allocation_record and (allocation_record.allocation_type == AllocationType.static):
                 continue
@@ -1030,6 +1033,7 @@ class ObjectClosure:
             # allocated as an array of size one of the struct they represent).
             offsets[obj.volatile_memory_id] = current_offset
             current_offset += obj.get_bytes()
+        outf.close()
 
         ### LET'S WRITE SOME BYTES!!!
         # (1) Write out the mmap offset that the file should be loaded at!
@@ -1088,7 +1092,15 @@ class ObjectClosure:
                     assert len(new_pointer_value) == _SIZE_BYTES_POINTER
 
                     relocated_bytes += new_pointer_value
+                else:
+                    if original_pointer_value.pointer_location != 0:
+                        # FIXME: ensure that if the relocation could not be found, that it is
+                        # somewhere within the static text/data region, so that we can expect it to
+                        # exist when we read the file back in from mmap!
+                        logger.warning(f'could not find relocated value for pointer {original_pointer_value}')
 
             all_bytes_mutable[byte_offset:(byte_offset + len(original_bytes))] = relocated_bytes
+
+        logger.warn(f'all objects were written to {all_objects_filename}')
 
         return bytes(all_bytes_mutable)
