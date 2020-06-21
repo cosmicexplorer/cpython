@@ -191,7 +191,7 @@ class FieldOffset:
 
     def __sub__(self, other: 'FieldOffset') -> 'FieldOffset':
         assert isinstance(other, type(self))
-        assert self._offset >= other._offset, f'invalid offset subtraction: {self.offset=}, {other._offset=}'
+        assert self._offset >= other._offset, f'invalid offset subtraction: {self._offset=}, {other._offset=}'
         return type(self)(self._offset - other._offset)
 
 
@@ -416,14 +416,11 @@ class LivePythonCLevelObject:
             record_size = RecordSize(_SIZE_BYTES_LONG * _BITS_PER_BYTE)
 
         logger.info(f'attempted read at {id=} of size {record_size=}')
-        try:
-            allocation_report.validate_attempted_process_memory_read(
-                start=id.pointer_location,
-                length=record_size.as_size_in_bits(),
-            )
-        except InvalidAttemptedProcessMemoryRead as e:
-            logger.exception(e)
-            logger.warning('DOING IT ANYWAY!!')
+        # import pdb; pdb.set_trace()
+        allocation_report.validate_attempted_process_memory_read(
+            start=id.pointer_location,
+            length=record_size.as_size_in_bits(),
+        )
 
         object_bytes = gc.pdmp_write_relocatable_object(
             id.pointer_location,
@@ -509,6 +506,7 @@ class LivePythonCLevelObject:
                 # intrusive size hint was provided.
                 num_allocations = self.intrusive_length_hint
                 if num_allocations is None:
+                    # num_allocations = IntrusiveLength(1)
                     # num_allocations = IntrusiveLength(len(self.get_bytes()) // _SIZE_BYTES_POINTER)
                     logger.warning(f'could not detect allocation at {self=}: assuming size 0')
                     return []
@@ -534,14 +532,17 @@ class LivePythonCLevelObject:
             )
             base_pointer = self.volatile_memory_id
 
-            sub_pointers = [
-                type(self).create(
-                    id=(base_pointer + (FieldOffset.from_record_size(record_size) * cur_element_index)),
-                    descriptor=new_descriptor,
-                    allocation_report=db.allocation_report,
-                )
-                for cur_element_index in range(num_allocations.get_length())
-            ]
+            sub_pointers = []
+            for cur_element_index in range(num_allocations.get_length()):
+                try:
+                    subobject = type(self).create(
+                        id=(base_pointer + (FieldOffset.from_record_size(record_size) * cur_element_index)),
+                        descriptor=new_descriptor,
+                        allocation_report=db.allocation_report,
+                    )
+                    sub_pointers.append(subobject)
+                except InvalidAttemptedProcessMemoryRead:
+                    continue
 
             return sub_pointers
 
@@ -607,12 +608,8 @@ class AllocationType(Enum):
 
 
 class StaticSymbolType(Enum):
-    if _is_osx:
-        text = '__TEXT'
-        data = '__DATA'
-    else:
-        text = '.text'
-        data = '.data'
+    text = '.text'
+    data = '.data'
 
 
 @dataclass(frozen=True)
@@ -677,45 +674,21 @@ class StaticAllocationReport:
             path: Path,
             dumped_segments: List[str],
     ) -> StaticSectionsHeader:
-        # if _is_osx:
-        if False:
-            assert dumped_segments[0] == f'{sys.executable}:'
-            assert dumped_segments[1] == 'Sections:'
-            assert dumped_segments[2].startswith('Idx')
-
-            #   0 __text        001d44ae 0000000100001680 TEXT
-            dumped_text_segment = re.match(r'  0 __text        ([0-9a-f]{8}) ([0-9a-f]{16}) TEXT',
-                                           dumped_segments[3])
-            assert dumped_text_segment is not None
-            _dumped_text_size, dumped_text_start = dumped_text_segment.groups()
-            dumped_text_start = PythonCLevelPointerLocation(int(dumped_text_start, base=16))
-
-            #   9 __data        0003362d 0000000100269980 DATA
-            dumped_data_segment = re.match(r'  9 __data        ([0-9a-f]{8}) ([0-9a-f]{16}) DATA',
-                                           dumped_segments[12])
-            assert dumped_data_segment is not None
-            _dumped_data_size, dumped_data_start = dumped_data_segment.groups()
-            dumped_data_start = PythonCLevelPointerLocation(int(dumped_data_start, base=16))
-
-            assert dumped_segments[16] == 'SYMBOL TABLE:'
-
-            possibly_parseable_static_symbols = dumped_segments[17:]
-        else:
-            # 0 .text         00240732  000000000005c760  000000000005c760  0005c760  2**4
-            text_segment_pattern = re.compile(r'0 \.text[ \t]+[0-9a-f]+[ \t]+([0-9a-f]+)')
-            # 9 .data         00035df8  000000000057e000  000000000057e000  0037e000  2**4
-            data_segment_pattern = re.compile(r'9 \.data[ \t]+[0-9a-f]+[ \t]+([0-9a-f]+)')
-            # import pdb; pdb.set_trace()
-            for index, line in enumerate(dumped_segments):
-                if dumped_text_segment := text_segment_pattern.search(line):
-                    (dumped_text_start,) = dumped_text_segment.groups()
-                    dumped_text_start = PythonCLevelPointerLocation(int(dumped_text_start, base=16))
-                if dumped_data_segment := data_segment_pattern.search(line):
-                    (dumped_data_start,) = dumped_data_segment.groups()
-                    dumped_data_start = PythonCLevelPointerLocation(int(dumped_data_start, base=16))
-                if line == 'SYMBOL TABLE:':
-                    possibly_parseable_static_symbols = dumped_segments[(index + 1):]
-                    break
+        # 0 .text         001ee11e  00000000000007f0  00000000000007f0  000007f0  2**4
+        text_segment_pattern = re.compile(r'0 \.text[ \t]+([0-9a-f]+)[ \t]+([0-9a-f]+)')
+        # 9 .data         000343bd  00000000002829a0  00000000002829a0  002829a0  2**4
+        data_segment_pattern = re.compile(r'9 \.data[ \t]+([0-9a-f]+)[ \t]+([0-9a-f]+)')
+        # import pdb; pdb.set_trace()
+        for index, line in enumerate(dumped_segments):
+            if dumped_text_segment := text_segment_pattern.search(line):
+                (_text_size, dumped_text_start,) = dumped_text_segment.groups()
+                dumped_text_start = PythonCLevelPointerLocation(int(dumped_text_start, base=16))
+            if dumped_data_segment := data_segment_pattern.search(line):
+                (_data_size, dumped_data_start,) = dumped_data_segment.groups()
+                dumped_data_start = PythonCLevelPointerLocation(int(dumped_data_start, base=16))
+            if line == 'SYMBOL TABLE:':
+                possibly_parseable_static_symbols = dumped_segments[(index + 1):]
+                break
 
         return StaticSectionsHeader(
             dumped_text_start=dumped_text_start,
@@ -733,57 +706,34 @@ class StaticAllocationReport:
         live_data_segment_offset: FieldOffset,
         next_line: Optional[str],
     ) -> Optional[LiveStaticSymbol]:
-        if _is_osx:
-            # 0000000100002500 l     F __TEXT,__text  _freechildren
-            # 000000010027aa68 l     O __DATA,__data  _empty_keys_struct
-            _static_record_pattern = re.compile(r'^([0-9a-f]{16})[ \t]+l[ \t]+[FO][ \t]+(__TEXT|__DATA),(__[a-z]+)[ \t]+(.*)$')
-            if static_segment_record := _static_record_pattern.match(line):
-                hex_offset, symbol_type_str, secondary_name, symbol_name = tuple(static_segment_record.groups())
+        # 0000000000001ee0 g       1e SECT   01 0000 [.text] __PyPegen_lookahead_with_name
+        _static_record_pattern = re.compile(r'^([0-9a-f]{16})[ \t]+.*\[(\.text|\.data)\][ \t]+([a-zA-Z_]+)$')
+        if static_segment_record := _static_record_pattern.match(line):
+            hex_offset, symbol_type_str, symbol_name = tuple(static_segment_record.groups())
+            secondary_name = None
 
-                symbol_type = StaticSymbolType(symbol_type_str)
-                offset = FieldOffset.parse_from_objdump_hex(hex_offset)
+            symbol_type = StaticSymbolType(symbol_type_str)
 
-                if symbol_type == StaticSymbolType.text:
-                    location = text_segment_start + live_text_segment_offset + offset
-                else:
-                    assert symbol_type == StaticSymbolType.data
-                    location = data_segment_start + live_data_segment_offset + offset
+            offset = FieldOffset.parse_from_objdump_hex(hex_offset)
 
-                allocation_size = None
-                if next_line and (next_record := _static_record_pattern.match(next_line)):
-                    next_offset = FieldOffset.parse_from_objdump_hex(next_record.groups()[0])
-                    if next_offset.as_offset_in_bits() != 0:
-                        guessed_size = (next_offset - offset).as_offset_in_bits()
-                        if guessed_size >= 0:
-                            allocation_size = AllocationSize(guessed_size)
+            if symbol_type == StaticSymbolType.text:
+                location = text_segment_start + live_text_segment_offset + offset
             else:
-                return None
+                assert symbol_type == StaticSymbolType.data
+            location = data_segment_start + live_data_segment_offset + offset
+
+            allocation_size = None
+            if next_line and (next_record := _static_record_pattern.match(next_line)):
+                next_offset = FieldOffset.parse_from_objdump_hex(next_record.groups()[0])
+                if next_offset.as_offset_in_bits() != 0:
+                    try:
+                        guessed_size = (next_offset - offset).as_offset_in_bits()
+                    except AssertionError:
+                        guessed_size = 0
+                    if guessed_size >= 0:
+                        allocation_size = AllocationSize(guessed_size)
         else:
-            # 00000000000ad0e0 l     F .text  00000000000000fa              dict_clear
-            # 0000000000588200 l     O .data  0000000000000030              empty_keys_struct
-            _static_record_pattern = re.compile(r'^([0-9a-f]{16})[ \t]+l[ \t]+[FO][ \t]+(\.text|\.data)[ \t]+([a-z]+)[ \t]+(.*)$')
-            if static_segment_record := _static_record_pattern.match(line):
-                hex_offset, symbol_type_str, _hex_idk, symbol_name = tuple(static_segment_record.groups())
-                secondary_name = None
-
-                symbol_type = StaticSymbolType(symbol_type_str)
-                offset = FieldOffset.parse_from_objdump_hex(hex_offset)
-
-                if symbol_type == StaticSymbolType.text:
-                    location = text_segment_start + live_text_segment_offset + offset
-                else:
-                    assert symbol_type == StaticSymbolType.data
-                    location = data_segment_start + live_data_segment_offset + offset
-
-                allocation_size = None
-                if next_line and (next_record := _static_record_pattern.match(next_line)):
-                    next_offset = FieldOffset.parse_from_objdump_hex(next_record.groups()[0])
-                    if next_offset.as_offset_in_bits() != 0:
-                        guessed_size = (next_offset - offset).as_offset_in_bits()
-                        if guessed_size >= 0:
-                            allocation_size = AllocationSize(guessed_size)
-            else:
-                return None
+            return None
 
         symbol = LiveStaticSymbol(
             symbol_type=symbol_type,
@@ -804,8 +754,6 @@ class StaticAllocationReport:
         # Now, extract the records of allocations from the python executable.
 
         platform_specific_objdump_arguments = (
-            ['-macho', '-all-headers']
-            if _is_osx else
             ['--all-headers']
         )
 
@@ -899,6 +847,7 @@ class RawAllocationReport:
         allocation_end = loc.pointer_location + allocation_size.as_size_in_bits()
         desired_end = start + length
 
+        # import pdb; pdb.set_trace()
         if desired_end > allocation_end:
             raise InvalidAttemptedProcessMemoryRead(f'{length=} is greater than the known allocated region of size {allocation_size.as_size_in_bits()=}')
 
@@ -927,7 +876,8 @@ class RawAllocationReport:
             cur_pointer, cur_nbytes = struct.unpack(
                 'PN',
                 cur_record_bytes)
-            records[PythonCLevelPointerLocation(cur_pointer)] = AllocationSize(cur_nbytes)
+            # FIXME: why this particular scaling factor???
+            records[PythonCLevelPointerLocation(cur_pointer)] = AllocationSize(cur_nbytes * _BITS_PER_BYTE * 4)
 
         static_report = StaticAllocationReport.extract_from_executable(executable)
 
@@ -1010,6 +960,7 @@ class LibclangDatabase:
                 intrusive_length_hint=None,
             )
 
+        # import pdb; pdb.set_trace()
         live_entrypoint_object = LivePythonCLevelObject.from_python_object(
             source_object,
             descriptor,
