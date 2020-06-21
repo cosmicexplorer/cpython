@@ -394,10 +394,12 @@ class LivePythonCLevelObject:
         cls,
         source_object: Any,
         descriptor: Union[LibclangNativeObjectDescriptor, BasicCLevelTypeDescriptor],
+        allocation_report: RawAllocationReport,
     ) -> 'LivePythonCLevelObject':
         return cls.create(
             id=PythonCLevelPointerLocation.from_python_object(source_object),
             descriptor=descriptor,
+            allocation_report=allocation_report,
         )
 
     @classmethod
@@ -405,6 +407,7 @@ class LivePythonCLevelObject:
         cls,
         id: PythonCLevelPointerLocation,
         descriptor: Union[LibclangNativeObjectDescriptor, BasicCLevelTypeDescriptor],
+        allocation_report: RawAllocationReport,
     ) -> 'LivePythonCLevelObject':
         assert isinstance(id, PythonCLevelPointerLocation)
 
@@ -412,6 +415,10 @@ class LivePythonCLevelObject:
         if record_size is None:
             record_size = RecordSize(_SIZE_BYTES_LONG * _BITS_PER_BYTE)
 
+        allocation_report.validate_attempted_process_memory_read(
+            start=id.pointer_location,
+            length=record_size.as_size_in_bits(),
+        )
         object_bytes = gc.pdmp_write_relocatable_object(
             id.pointer_location,
             record_size.as_size_in_bits(),
@@ -525,6 +532,7 @@ class LivePythonCLevelObject:
                 type(self).create(
                     id=(base_pointer + (FieldOffset.from_record_size(record_size) * cur_element_index)),
                     descriptor=new_descriptor,
+                    allocation_report=db.allocation_report,
                 )
                 for cur_element_index in range(num_allocations.get_length())
             ]
@@ -557,6 +565,7 @@ class LivePythonCLevelObject:
             sub = type(self).create(
                 id=(self.volatile_memory_id + field.offset),
                 descriptor=descriptor,
+                allocation_report=db.allocation_report,
             )
             sub_objects.append(sub)
         return sub_objects
@@ -633,6 +642,17 @@ class StaticAllocationReport:
     data_segment_start: PythonCLevelPointerLocation
     text_allocation_report: Dict[PythonCLevelPointerLocation, LiveStaticSymbol]
     data_allocation_report: Dict[PythonCLevelPointerLocation, LiveStaticSymbol]
+
+    @cached_property
+    def all_conceivable_allocations(self) -> Dict[PythonCLevelPointerLocation, AllocationSize]:
+        return {
+            loc: sym.size
+            if sym.size is not None
+            for loc, sym in [
+                    *self.text_allocation_report.items(),
+                    *self.data_allocation_report.items(),
+            ]
+        }
 
     def get(self, id: PythonCLevelPointerLocation) -> Optional['TrackedAllocation']:
         if text_entry := self.text_allocation_report.get(id, None):
@@ -827,10 +847,51 @@ class TrackedAllocation:
     size: Optional[AllocationSize]
 
 
+class InvalidAttemptedProcessMemoryRead(Exception):
+    """???"""
+
+
 @dataclass(frozen=True)
 class RawAllocationReport:
     records: Dict[PythonCLevelPointerLocation, AllocationSize]
     static_report: StaticAllocationReport
+
+    @cached_property
+    def all_conceivable_allocations(self) -> Dict[PythonCLevelPointerLocation, AllocationSize]:
+        return {
+            **self.static_report.all_conceivable_allocations,
+            **self.records,
+        }
+
+    @cached_property
+    def _all_allocation_starts(self) -> List[int]:
+        return list(sorted(
+            loc.pointer_location for loc in
+            self.all_conceivable_allocations.keys()
+        ))
+
+    def validate_attempted_process_memory_read(self, start: int, length: int) -> None:
+        assert len(self._all_allocation_starts) > 0
+        assert start > 0
+        assert length > 0
+
+        if start < self._all_allocation_starts[0]:
+            raise InvalidAttemptedProcessMemoryRead(f'{start=} is less than minimum allocation start {self._all_allocation_starts[0]=}')
+
+        greatest_allocation_start = self._all_allocation_starts[0]
+        for maybe_start in self._all_allocation_starts:
+            if maybe_start > start:
+                break
+            greatest_allocation_start = maybe_start
+
+        loc = PythonCLevelPointerLocation(greatest_allocation_start)
+        allocation_size = self.all_conceivable_allocations[loc]
+
+        allocation_end = loc.pointer_location + allocation_size.as_size_in_bits()
+        desired_end = start + length
+
+        if desired_end > allocation_end:
+            raise InvalidAttemptedProcessMemoryRead(f'{length=} is greater than the known allocated region of size {allocation_size.as_size_in_bits()=}')
 
     def get(self, id: PythonCLevelPointerLocation) -> Optional[TrackedAllocation]:
         if live_record_size := self.records.get(id, None):
@@ -932,8 +993,10 @@ class LibclangDatabase:
                 intrusive_length_hint=None,
             )
 
-        live_entrypoint_object = LivePythonCLevelObject.from_python_object(source_object,
-                                                                           descriptor)
+        live_entrypoint_object = LivePythonCLevelObject.from_python_object(
+            source_object,
+            descriptor,
+            allocation_report=self.allocation_report)
 
         stack.append(live_entrypoint_object)
 
