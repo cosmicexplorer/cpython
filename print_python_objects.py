@@ -2,6 +2,7 @@ import dataclasses
 import glob
 import itertools
 import json
+import logging
 import os
 import re
 import sys
@@ -12,6 +13,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import clang.cindex as clang
+
+
+logger = logging.getLogger(__name__)
 
 
 def _maybe_typedef_underlying(cursor: clang.Cursor) -> clang.Type:
@@ -257,8 +261,8 @@ class FileToParse:
                     fields.append((field.spelling, (field_target_type, non_pointer_target_type)))
 
                     # Check for PyObject_HEAD.
-                    # NB: We intentionally access `field.type`, NOT `field_target_type`, because we want to
-                    # check whether the typedef'd named is PyObject, not the source struct!
+                    # NB: We intentionally access `field.type`, NOT `field_target_type`, because we
+                    # want to check whether the typedef'd named is PyObject, not the source struct!
                     if field.type.spelling == 'PyObject':
                         assert field.spelling == 'ob_base'
                         # This is always the first element of any PyObject struct.
@@ -270,8 +274,8 @@ class FileToParse:
                 )
                 struct_field_mapping.append(entry)
 
-            # Find PyTypeObject usages in order to map PyObject subclasses to the names of the builtin types
-            # that represent them!
+            # Find PyTypeObject usages in order to map PyObject subclasses to the names of the
+            # builtin types that represent them!
             elif kind == clang.CursorKind.VAR_DECL:
                 if not cursor.is_definition():
                     continue
@@ -279,20 +283,31 @@ class FileToParse:
                     name_literal = None
                     basicsize_sizeof_object = None
 
-                    for c in cursor.walk_preorder():
-                        if c.kind == clang.CursorKind.STRING_LITERAL:
-                            if name_literal is not None:
-                                continue
-                            name_literal = c.spelling.replace('"', '')
-                        elif c.kind == clang.CursorKind.CXX_UNARY_EXPR:
-                            if basicsize_sizeof_object is not None:
-                                continue
-                            args = list(c.get_children())
-                            if len(args) != 1:
-                                continue
-                            # assert len(args) == 1, f'len(args): {len(args)} was not 1!'
-                            type_defn = args[0].get_definition()
-                            basicsize_sizeof_object = _maybe_typedef_underlying(type_defn)
+                    try:
+                        decl_args = list(list(cursor.get_children())[-1].get_children())
+                    except Exception as e:
+                        logger.warning(str([[tok.spelling for tok in cur.get_tokens()]
+                                            for cur in cursor.get_children()]))
+                        logger.exception(e)
+                        continue
+
+                    name_args = tuple(decl_args[1].get_tokens())
+                    if not name_args:
+                        continue
+                    name_literal = name_args[-1].spelling.replace('"', '')
+
+                    try:
+                        object_layout_target = list(
+                            list(decl_args[2].get_children())[-1]
+                            .get_children())[0]
+                    except Exception as e:
+                        logger.warning(str([[tok.spelling for tok in cur.get_tokens()]
+                                            for cur in decl_args[2].get_children()]))
+                        logger.exception(e)
+                        continue
+                    type_defn = object_layout_target.get_definition()
+                    if type_defn is not None:
+                        basicsize_sizeof_object = _maybe_typedef_underlying(type_defn)
 
                     if not (name_literal and basicsize_sizeof_object):
                         continue
