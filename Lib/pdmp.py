@@ -537,7 +537,8 @@ class LivePythonCLevelObject:
                         allocation_report=db.allocation_report,
                     )
                     sub_pointers.append(subobject)
-                except InvalidAttemptedProcessMemoryRead:
+                except InvalidAttemptedProcessMemoryRead as e:
+                    logger.exception(e)
                     continue
 
             return sub_pointers
@@ -724,7 +725,8 @@ class StaticAllocationReport:
                 if next_offset.as_offset_in_bits() != 0:
                     try:
                         guessed_size = (next_offset - offset).as_offset_in_bits()
-                    except AssertionError:
+                    except AssertionError as e:
+                        logger.exception(e)
                         guessed_size = 0
                     if guessed_size >= 0:
                         allocation_size = AllocationSize(guessed_size)
@@ -954,7 +956,7 @@ class LibclangDatabase:
 
         try:
             descriptor = self.struct_field_mapping[py_struct_name]
-        except KeyError as e:
+        except KeyError:
             # A struct definition was not found, so this is a "basic" type.
             descriptor = BasicCLevelTypeDescriptor(
                 native_type_name=py_struct_name,
@@ -1016,7 +1018,7 @@ class ObjectClosure:
         # Line up all the heap-allocated python objects consecutively (without writing anything to
         # the file just yet).
         current_offset = FieldOffset(0)
-        offsets = OrderedDict() # [PythonCLevelPointerLocation, FieldOffset]
+        offsets: Dict[PythonCLevelPointerLocation, FieldOffset] = OrderedDict()
 
         for obj in self._live_object_list:
             allocation_record = allocation_report.get(obj.volatile_memory_id)
@@ -1041,7 +1043,7 @@ class ObjectClosure:
         all_bytes += struct.pack('P', data_start.pointer_location)
 
         # (3) Relocate the objects!!
-        relocations = OrderedDict() # [PythonCLevelPointerLocation, RelocatedObject]
+        relocations: Dict[PythonCLevelPointerLocation, RelocatedObject] = OrderedDict()
         object_initial_offset = FieldOffset(len(all_bytes))
         for original_id, basic_offset in offsets.items():
             new_offset = (object_initial_offset + basic_offset)
