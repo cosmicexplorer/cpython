@@ -854,10 +854,17 @@ mmap_madvise_method(mmap_object *self, PyObject *args)
 }
 #endif // HAVE_MADVISE
 
-static struct PyMemberDef mmap_object_members[] = {
-    {"__weaklistoffset__", T_PYSSIZET, offsetof(mmap_object, weakreflist), READONLY},
-    {NULL},
-};
+PyDoc_STRVAR(mmap_read_object_at_doc,
+"read_object_at(pos)\n"
+"\n"
+"Read a PyObject* from the position in the mapping.");
+
+static PyObject *mmap_read_object_at(mmap_object *self, PyObject *args, PyObject *kwds) {
+    CHECK_VALID(NULL);
+    PyObject *offset_object = PyTuple_GetItem(args, 0);
+    long offset = PyLong_AsLong(offset_object);
+    return (PyObject*)&self->data[offset];
+}
 
 static struct PyMethodDef mmap_object_methods[] = {
     {"close",           (PyCFunction) mmap_close_method,        METH_NOARGS},
@@ -869,6 +876,7 @@ static struct PyMethodDef mmap_object_methods[] = {
 #endif
     {"move",            (PyCFunction) mmap_move_method,         METH_VARARGS},
     {"read",            (PyCFunction) mmap_read_method,         METH_VARARGS},
+    {"read_object_at",  (PyCFunction) mmap_read_object_at,      METH_VARARGS, mmap_read_object_at_doc},
     {"read_byte",       (PyCFunction) mmap_read_byte_method,    METH_NOARGS},
     {"readline",        (PyCFunction) mmap_read_line_method,    METH_NOARGS},
     {"resize",          (PyCFunction) mmap_resize_method,       METH_VARARGS},
@@ -1182,14 +1190,17 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
     int fd, flags = MAP_SHARED, prot = PROT_WRITE | PROT_READ;
     int devzero = -1;
     int access = (int)ACCESS_DEFAULT;
+    void* initial_address = NULL;
     static char *keywords[] = {"fileno", "length",
                                "flags", "prot",
-                               "access", "offset", NULL};
+                               "access", "offset", "initial_address", NULL};
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwdict, "in|iii" _Py_PARSE_OFF_T, keywords,
+    if (!PyArg_ParseTupleAndKeywords(args, kwdict, "in|iii" _Py_PARSE_OFF_T "L", keywords,
                                      &fd, &map_size, &flags, &prot,
                                      &access, &offset))
         return NULL;
+    fprintf(stderr, "map_size: %ld, offset: %lld, initial_address: %p\n", map_size, offset, initial_address);
+
     if (map_size < 0) {
         PyErr_SetString(PyExc_OverflowError,
                         "memory mapped length must be positive");
@@ -1318,9 +1329,16 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
         }
     }
 
-    m_obj->data = mmap(NULL, map_size,
+#ifdef __linux__
+#error "linux has no MAP_FIXED equivalent!"
+#else
+    if (initial_address) {
+      flags = MAP_FIXED;
+    }
+    m_obj->data = mmap(initial_address, map_size,
                        prot, flags,
                        fd, offset);
+#endif
 
     if (devzero != -1) {
         close(devzero);
