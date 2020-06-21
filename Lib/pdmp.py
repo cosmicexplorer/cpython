@@ -830,10 +830,7 @@ class TrackedAllocation:
 @dataclass(frozen=True)
 class RawAllocationReport:
     records: Dict[PythonCLevelPointerLocation, AllocationSize]
-
-    @cached_property
-    def static_report(self) -> StaticAllocationReport:
-        return StaticAllocationReport.extract_from_executable()
+    static_report: StaticAllocationReport
 
     def get(self, id: PythonCLevelPointerLocation) -> Optional[TrackedAllocation]:
         if live_record_size := self.records.get(id, None):
@@ -862,7 +859,9 @@ class RawAllocationReport:
                 cur_record_bytes)
             records[PythonCLevelPointerLocation(cur_pointer)] = AllocationSize(cur_nbytes)
 
-        return cls(records)
+        static_report = StaticAllocationReport.extract_from_executable()
+
+        return cls(records=records, static_report=static_report)
 
 
 
