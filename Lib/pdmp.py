@@ -416,7 +416,8 @@ class LivePythonCLevelObject:
             record_size = RecordSize(_SIZE_BYTES_LONG * _BITS_PER_BYTE)
 
         logger.info(f'attempted read at {id=} of size {record_size=}')
-        # import pdb; pdb.set_trace()
+        logger.warning(f'attempted read at {id=} of size {record_size=}')
+        import pdb; pdb.set_trace()
         allocation_report.validate_attempted_process_memory_read(
             start=id.pointer_location,
             length=record_size.as_size_in_bits(),
@@ -506,10 +507,10 @@ class LivePythonCLevelObject:
                 # intrusive size hint was provided.
                 num_allocations = self.intrusive_length_hint
                 if num_allocations is None:
-                    # num_allocations = IntrusiveLength(1)
+                    num_allocations = IntrusiveLength(1)
                     # num_allocations = IntrusiveLength(len(self.get_bytes()) // _SIZE_BYTES_POINTER)
-                    logger.warning(f'could not detect allocation at {self=}: assuming size 0')
-                    return []
+                    logger.warning(f'could not detect allocation at {self=}: assuming size 1')
+                    # return []
             else:
                 assert (allocation_size == 1) or (allocation_size % record_size.as_size_in_bits() == 0)
                 num_allocations = IntrusiveLength(allocation_size // record_size.as_size_in_bits())
@@ -717,10 +718,11 @@ class StaticAllocationReport:
             offset = FieldOffset.parse_from_objdump_hex(hex_offset)
 
             if symbol_type == StaticSymbolType.text:
-                location = text_segment_start + live_text_segment_offset + offset
+                location = live_text_segment_offset + offset
             else:
                 assert symbol_type == StaticSymbolType.data
-            location = data_segment_start + live_data_segment_offset + offset
+                location = live_data_segment_offset + offset
+            location = PythonCLevelPointerLocation(location.as_offset_in_bits())
 
             allocation_size = None
             if next_line and (next_record := _static_record_pattern.match(next_line)):
@@ -833,6 +835,8 @@ class RawAllocationReport:
         assert length > 0
 
         if start < self._all_allocation_starts[0]:
+            # logger.exception(InvalidAttemptedProcessMemoryRead(f'{start=} is less than minimum allocation start {self._all_allocation_starts[0]=}'))
+            # return
             raise InvalidAttemptedProcessMemoryRead(f'{start=} is less than minimum allocation start {self._all_allocation_starts[0]=}')
 
         greatest_allocation_start = self._all_allocation_starts[0]
@@ -960,7 +964,7 @@ class LibclangDatabase:
                 intrusive_length_hint=None,
             )
 
-        # import pdb; pdb.set_trace()
+        import pdb; pdb.set_trace()
         live_entrypoint_object = LivePythonCLevelObject.from_python_object(
             source_object,
             descriptor,
