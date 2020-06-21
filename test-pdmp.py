@@ -12,8 +12,12 @@ db = pdmp.LibclangDatabase.from_json(objs, Path('libpython3.10.dylib'))
 o = Path('a')
 p = pdmp.pdmp(o)
 
-# p.dump(db, int)
-p.dump(db, 3)
+class C:
+    x = 3
+
+# p.dump(db, C)
+p.dump(db, int)
+# p.dump(db, 3)
 
 with p.load(db.allocation_report.static_report) as q:
     print(q)
