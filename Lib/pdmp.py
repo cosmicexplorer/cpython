@@ -394,7 +394,7 @@ class LivePythonCLevelObject:
         cls,
         source_object: Any,
         descriptor: Union[LibclangNativeObjectDescriptor, BasicCLevelTypeDescriptor],
-        allocation_report: RawAllocationReport,
+        allocation_report: 'RawAllocationReport',
     ) -> 'LivePythonCLevelObject':
         return cls.create(
             id=PythonCLevelPointerLocation.from_python_object(source_object),
@@ -407,7 +407,7 @@ class LivePythonCLevelObject:
         cls,
         id: PythonCLevelPointerLocation,
         descriptor: Union[LibclangNativeObjectDescriptor, BasicCLevelTypeDescriptor],
-        allocation_report: RawAllocationReport,
+        allocation_report: 'RawAllocationReport',
     ) -> 'LivePythonCLevelObject':
         assert isinstance(id, PythonCLevelPointerLocation)
 
@@ -415,10 +415,16 @@ class LivePythonCLevelObject:
         if record_size is None:
             record_size = RecordSize(_SIZE_BYTES_LONG * _BITS_PER_BYTE)
 
-        allocation_report.validate_attempted_process_memory_read(
-            start=id.pointer_location,
-            length=record_size.as_size_in_bits(),
-        )
+        logger.info(f'attempted read at {id=} of size {record_size=}')
+        try:
+            allocation_report.validate_attempted_process_memory_read(
+                start=id.pointer_location,
+                length=record_size.as_size_in_bits(),
+            )
+        except InvalidAttemptedProcessMemoryRead as e:
+            logger.exception(e)
+            logger.warning('DOING IT ANYWAY!!')
+
         object_bytes = gc.pdmp_write_relocatable_object(
             id.pointer_location,
             record_size.as_size_in_bits(),
@@ -647,11 +653,11 @@ class StaticAllocationReport:
     def all_conceivable_allocations(self) -> Dict[PythonCLevelPointerLocation, AllocationSize]:
         return {
             loc: sym.size
-            if sym.size is not None
             for loc, sym in [
                     *self.text_allocation_report.items(),
                     *self.data_allocation_report.items(),
             ]
+            if sym.size is not None
         }
 
     def get(self, id: PythonCLevelPointerLocation) -> Optional['TrackedAllocation']:
@@ -668,9 +674,11 @@ class StaticAllocationReport:
     @classmethod
     def _parse_static_sections(
             cls,
+            path: Path,
             dumped_segments: List[str],
     ) -> StaticSectionsHeader:
-        if _is_osx:
+        # if _is_osx:
+        if False:
             assert dumped_segments[0] == f'{sys.executable}:'
             assert dumped_segments[1] == 'Sections:'
             assert dumped_segments[2].startswith('Idx')
@@ -693,10 +701,11 @@ class StaticAllocationReport:
 
             possibly_parseable_static_symbols = dumped_segments[17:]
         else:
-            # 13 .text         00240732  000000000005c760  000000000005c760  0005c760  2**4
-            text_segment_pattern = re.compile(r'13 \.text[ \t]+[0-9a-f]+[ \t]+([0-9a-f]+)')
-            # 23 .data         00035df8  000000000057e000  000000000057e000  0037e000  2**5
-            data_segment_pattern = re.compile(r'23 \.data[ \t]+[0-9a-f]+[ \t]+([0-9a-f]+)')
+            # 0 .text         00240732  000000000005c760  000000000005c760  0005c760  2**4
+            text_segment_pattern = re.compile(r'0 \.text[ \t]+[0-9a-f]+[ \t]+([0-9a-f]+)')
+            # 9 .data         00035df8  000000000057e000  000000000057e000  0037e000  2**4
+            data_segment_pattern = re.compile(r'9 \.data[ \t]+[0-9a-f]+[ \t]+([0-9a-f]+)')
+            # import pdb; pdb.set_trace()
             for index, line in enumerate(dumped_segments):
                 if dumped_text_segment := text_segment_pattern.search(line):
                     (dumped_text_start,) = dumped_text_segment.groups()
@@ -786,7 +795,7 @@ class StaticAllocationReport:
         return symbol
 
     @classmethod
-    def extract_from_executable(cls) -> 'StaticAllocationReport':
+    def extract_from_executable(cls, path: Path) -> 'StaticAllocationReport':
         # Get the start of the text and data sections.
         etext, edata = gc.pdmp_get_data_and_text_segment_starts()
         text_segment_start = PythonCLevelPointerLocation(etext)
@@ -803,14 +812,14 @@ class StaticAllocationReport:
         dumped_segments = list(
             subprocess.run(['objdump', '-t',
                             *platform_specific_objdump_arguments,
-                            sys.executable],
+                            str(path)],
                            capture_output=True,
                            check=True)
             .stdout
             .decode()
             .splitlines())
 
-        static_sections_header = cls._parse_static_sections(dumped_segments)
+        static_sections_header = cls._parse_static_sections(path, dumped_segments)
         live_text_segment_offset = text_segment_start - static_sections_header.dumped_text_start
         live_data_segment_offset = data_segment_start - static_sections_header.dumped_data_start
         possibly_parseable_static_symbols = static_sections_header.possibly_parseable_static_symbols
@@ -904,7 +913,7 @@ class RawAllocationReport:
         return None
 
     @classmethod
-    def get_current_report(cls, db: 'LibclangDatabase') -> 'RawAllocationReport':
+    def get_current_report(cls, db: 'LibclangDatabase', executable: Path) -> 'RawAllocationReport':
         single_record_size = db.allocation_record_struct.record_size.as_size_in_bits()
         all_allocations_all_bytes = gc.pdmp_write_allocation_report()
         assert len(all_allocations_all_bytes) % single_record_size == 0
@@ -920,7 +929,7 @@ class RawAllocationReport:
                 cur_record_bytes)
             records[PythonCLevelPointerLocation(cur_pointer)] = AllocationSize(cur_nbytes)
 
-        static_report = StaticAllocationReport.extract_from_executable()
+        static_report = StaticAllocationReport.extract_from_executable(executable)
 
         return cls(records=records, static_report=static_report)
 
@@ -932,9 +941,10 @@ class LibclangDatabase:
     tp_name_offset: int
     struct_field_mapping: Dict[NativeTypeName, LibclangNativeObjectDescriptor]
     py_object_mapping: Dict[PythonTypeName, NativeTypeName]
+    allocation_report: RawAllocationReport
 
     @classmethod
-    def from_json(cls, input_json: Dict[str, Any]) -> 'LibclangDatabase':
+    def from_json(cls, input_json: Dict[str, Any], executable: Path) -> 'LibclangDatabase':
         ob_type_offset = input_json['ob_type_offset']
         tp_name_offset = input_json['tp_name_offset']
 
@@ -951,20 +961,27 @@ class LibclangDatabase:
             for python_name, entry in input_json['py_object_mapping'].items()
         }
 
+        # FIXME: remove this gross hack to get the static allocation report!!
+        ret = cls(
+            ob_type_offset=ob_type_offset,
+            tp_name_offset=tp_name_offset,
+            struct_field_mapping=struct_field_mapping,
+            py_object_mapping=py_object_mapping,
+            allocation_report=None,
+        )
+        allocation_report = RawAllocationReport.get_current_report(ret, executable)
+
         return cls(
             ob_type_offset=ob_type_offset,
             tp_name_offset=tp_name_offset,
             struct_field_mapping=struct_field_mapping,
             py_object_mapping=py_object_mapping,
+            allocation_report=allocation_report,
         )
 
     @cached_property
     def allocation_record_struct(self) -> LibclangNativeObjectDescriptor:
         return self.struct_field_mapping[NativeTypeName('allocation_record')]
-
-    @cached_property
-    def allocation_report(self) -> RawAllocationReport:
-        return RawAllocationReport.get_current_report(self)
 
     class InvalidSourceObjectError(Exception):
         pass
