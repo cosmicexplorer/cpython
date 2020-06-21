@@ -1958,6 +1958,21 @@ gc_get_freeze_count_impl(PyObject *module)
     return gc_list_size(&gcstate->permanent_generation.head);
 }
 
+PyDoc_STRVAR(gc_pdmp_write_relocatable_object_doc,
+             "? ?/pdmp_write_relocatable_object($module, obj, size) -> bytes\n"
+             "\n"
+             "? ?/Return a relocatable bytes representation of the object `obj` of size `size`.");
+
+static PyObject *gc_pdmp_write_relocatable_object(PyObject *module,
+                                                  PyObject *args,
+                                                  PyObject **kwds) {
+    PyObject *source_object_location_ptr = PyTuple_GET_ITEM(args, 0);
+    long source_object_location = PyLong_AsLong(source_object_location_ptr);
+    PyObject *object_size_ptr = PyTuple_GET_ITEM(args, 1);
+    long object_size = PyLong_AsLong(object_size_ptr);
+    return PyBytes_FromStringAndSize((const char *)source_object_location, object_size);
+}
+
 static PyObject *gc_pdmp_write_allocation_report(PyObject *module) {
     struct all_allocations_report report = report_all_allocations();
     PyObject* result = PyBytes_FromStringAndSize((const char *)report.all_allocations,
@@ -2030,6 +2045,9 @@ static PyMethodDef GcMethods[] = {
     GC_FREEZE_METHODDEF
     GC_UNFREEZE_METHODDEF
     GC_GET_FREEZE_COUNT_METHODDEF
+    {"pdmp_write_relocatable_object",
+     (PyCFunction)gc_pdmp_write_relocatable_object, METH_VARARGS,
+     gc_pdmp_write_relocatable_object_doc},
     {"pdmp_write_allocation_report", (PyCFunction)gc_pdmp_write_allocation_report, METH_NOARGS, "aaa"},
     {"pdmp_get_data_and_text_segment_starts", (PyCFunction)gc_pdmp_get_data_and_text_segment_starts, METH_NOARGS, "bbb"},
     {NULL,      NULL}           /* Sentinel */
