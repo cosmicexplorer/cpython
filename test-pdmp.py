@@ -21,6 +21,7 @@ class C:
 
 # p.dump(db, C)
 p.dump(db, int)
+print(f'obj={int}, id={id(int)}')
 # p.dump(db, 3)
 
 with p.load(db.allocation_report.static_report) as q:
