@@ -415,12 +415,17 @@ class LivePythonCLevelObject:
         if record_size is None:
             record_size = RecordSize(_SIZE_BYTES_LONG * _BITS_PER_BYTE)
 
-        logger.info(f'attempted read at {id=} of size {record_size=}')
+        logger.debug(f'attempted read at {id=} of size {record_size=}')
         logger.warning(f'attempted read at {id=} of size {record_size=}')
         # import pdb; pdb.set_trace()
+
+        # We want to read a given number of bits, but C can only byte-address memory, so
+        # `gc.pdmp_write_relocatable_object()` can only write bytes at a time.
+        assert (record_size.as_size_in_bits() % _BITS_PER_BYTE) == 0, record_size
+        process_memory_read_length = record_size.as_size_in_bits() // _BITS_PER_BYTE
         object_bytes = allocation_report.validate_attempted_process_memory_read(
             start=id.pointer_location,
-            length=record_size.as_size_in_bits(),
+            length=process_memory_read_length,
         )
 
         if isinstance(descriptor, LibclangNativeObjectDescriptor):
@@ -504,7 +509,7 @@ class LivePythonCLevelObject:
                 if num_allocations is None:
                     # num_allocations = IntrusiveLength(1)
                     # num_allocations = IntrusiveLength(len(self.get_bytes()) // _SIZE_BYTES_POINTER)
-                    logger.warning(f'could not detect allocation at {self=}: assuming size 0')
+                    logger.warning(f'could not detect allocation at {self.volatile_memory_id=}: assuming size 0')
                     return []
             else:
                 assert (allocation_size == 1) or (allocation_size % record_size.as_size_in_bits() == 0)
@@ -831,9 +836,8 @@ class RawAllocationReport:
         assert length > 0
 
         if start < self._all_allocation_starts[0]:
-            logger.exception(InvalidAttemptedProcessMemoryRead(f'{start=} is less than minimum allocation start {self._all_allocation_starts[0]=}'))
+            logger.exception(InvalidAttemptedProcessMemoryRead(f'{start=} is less than minimum allocation start {self._all_allocation_starts[0]=} -- assuming a valid static allocation (!!?)'))
             return gc.pdmp_write_relocatable_object(start, length)
-            # raise InvalidAttemptedProcessMemoryRead(f'{start=} is less than minimum allocation start {self._all_allocation_starts[0]=}')
 
         greatest_allocation_start = self._all_allocation_starts[0]
         for maybe_start in self._all_allocation_starts:
