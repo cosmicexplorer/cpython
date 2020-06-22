@@ -24,6 +24,13 @@ p.dump(db, int)
 print(f'obj={int}, id={id(int)}')
 # p.dump(db, 3)
 
+# TODO:
+# 1. make print_python_objects.py into Lib/internal_struct_layout.py (and add a quick test!)! If
+#    possible, abstract away the use of libclang specifically, and then put the libclang impl in a
+#    script!
+# 2. add testing for the expected pdmp file content for 3, int, C, etc (this should fix the
+#    segfault!)!
+
 with p.load(db.allocation_report.static_report) as q:
     logger.warning('segfault!')
     print(q(3))
