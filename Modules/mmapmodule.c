@@ -821,6 +821,11 @@ static PyObject *mmap_read_object_at(mmap_object *self, PyObject *args, PyObject
     return (PyObject*)&self->data[offset];
 }
 
+static struct PyMemberDef mmap_object_members[] = {
+    {"__weaklistoffset__", T_PYSSIZET, offsetof(mmap_object, weakreflist), READONLY},
+    {NULL},
+};
+
 static struct PyMethodDef mmap_object_methods[] = {
     {"close",           (PyCFunction) mmap_close_method,        METH_NOARGS},
     {"find",            (PyCFunction) mmap_find_method,         METH_VARARGS},
@@ -1284,16 +1289,12 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
         }
     }
 
-#ifdef __linux__
-#error "linux has no MAP_FIXED equivalent!"
-#else
     if (initial_address) {
       flags |= MAP_FIXED;
     }
     m_obj->data = mmap(initial_address, map_size,
                        prot, flags,
                        fd, offset);
-#endif
 
     if (devzero != -1) {
         close(devzero);
