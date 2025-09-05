@@ -66,7 +66,17 @@ static void faulthandler_user(int signum);
 #endif /* FAULTHANDLER_USER */
 
 
-static fault_handler_t faulthandler_handlers[] = {
+#if defined(SIGBUS) && defined(SIGILL)
+#define NUM_KNOWN_FAULT_HANDLERS 5
+#elif defined(SIGBUS)
+#define NUM_KNOWN_FAULT_HANDLERS 4
+#elif defined(SIGILL)
+#define NUM_KNOWN_FAULT_HANDLERS 4
+#else
+#define NUM_KNOWN_FAULT_HANDLERS 3
+#endif /* defined(SIGBUS) && defined(SIGILL) */
+
+static const fault_handler_t faulthandler_handlers[NUM_KNOWN_FAULT_HANDLERS] = {
 #ifdef SIGBUS
     {SIGBUS, 0, "Bus error", },
 #endif
@@ -79,8 +89,9 @@ static fault_handler_t faulthandler_handlers[] = {
        handler fails in faulthandler_fatal_error() */
     {SIGSEGV, 0, "Segmentation fault", }
 };
-static const size_t faulthandler_nsignals = \
-    Py_ARRAY_LENGTH(faulthandler_handlers);
+static const size_t faulthandler_nsignals = NUM_KNOWN_FAULT_HANDLERS;
+
+#undef NUM_KNOWN_FAULT_HANDLERS
 
 #ifdef FAULTHANDLER_USE_ALT_STACK
 #  define stack _PyRuntime.faulthandler.stack
@@ -381,7 +392,7 @@ faulthandler_fatal_error(int signum)
         return;
 
     for (i=0; i < faulthandler_nsignals; i++) {
-        handler = &faulthandler_handlers[i];
+        handler = (fault_handler_t*) &faulthandler_handlers[i];
         if (handler->signum == signum) {
             found = 1;
             break;
@@ -547,7 +558,7 @@ faulthandler_enable(void)
         fault_handler_t *handler;
         int err;
 
-        handler = &faulthandler_handlers[i];
+        handler = (fault_handler_t*) &faulthandler_handlers[i];
         assert(!handler->enabled);
 #ifdef HAVE_SIGACTION
         struct sigaction action;
@@ -632,7 +643,7 @@ faulthandler_disable(void)
         fatal_error.enabled = 0;
         for (size_t i=0; i < faulthandler_nsignals; i++) {
             fault_handler_t *handler;
-            handler = &faulthandler_handlers[i];
+            handler = (fault_handler_t*) &faulthandler_handlers[i];
             faulthandler_disable_fatal_handler(handler);
         }
     }

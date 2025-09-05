@@ -7188,6 +7188,7 @@ SRCDIRS="\
   Modules/_multiprocessing \
   Modules/_sqlite \
   Modules/_sre \
+  Modules/_string_ops \
   Modules/_testcapi \
   Modules/_testinternalcapi \
   Modules/_testlimitedcapi \
