@@ -144,8 +144,8 @@ exec_prefix=	@exec_prefix@
 # For cross compilation, we distinguish between "prefix" (where we install the
 # files) and "host_prefix" (where getpath.c expects to find the files at
 # runtime)
-host_prefix= 	@host_prefix@
-host_exec_prefix= 	@host_exec_prefix@
+host_prefix=	@host_prefix@
+host_exec_prefix=	@host_exec_prefix@
 
 
 # Install prefix for data files
@@ -263,7 +263,7 @@ CONFIG_ARGS=	@CONFIG_ARGS@
 
 
 # Subdirectories with code
-SRCDIRS= 	@SRCDIRS@
+SRCDIRS=	@SRCDIRS@
 
 # Other subdirectories
 SUBDIRSTOO=	Include Lib Misc
@@ -1931,6 +1931,8 @@ Programs/_testembed.o: $(srcdir)/Programs/_testembed.c Programs/test_frozenmain.
 	$(CC) -c $(PY_CORE_CFLAGS) -o $@ $(srcdir)/Programs/_testembed.c
 
 Modules/_sre/sre.o: $(srcdir)/Modules/_sre/sre.c $(srcdir)/Modules/_sre/sre.h $(srcdir)/Modules/_sre/sre_constants.h $(srcdir)/Modules/_sre/sre_lib.h
+
+Modules/_string_ops/string_ops.o: $(srcdir)/Modules/_string_ops/string_ops.c $(srcdir)/Modules/_string_ops/string_ops.h
 
 Modules/posixmodule.o: $(srcdir)/Modules/posixmodule.c $(srcdir)/Modules/posixmodule.h
 

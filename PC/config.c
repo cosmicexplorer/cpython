@@ -53,6 +53,8 @@ extern PyObject* PyInit__symtable(void);
 extern PyObject* PyInit_mmap(void);
 extern PyObject* PyInit__csv(void);
 extern PyObject* PyInit__sre(void);
+extern PyObject* PyInit__string_ops(void);
+
 #if defined(MS_WINDOWS_DESKTOP) || defined(MS_WINDOWS_SYSTEM) || defined(MS_WINDOWS_GAMES)
 extern PyObject* PyInit_winreg(void);
 #endif
@@ -143,6 +145,7 @@ struct _inittab _PyImport_Inittab[] = {
 #endif
     {"_csv", PyInit__csv},
     {"_sre", PyInit__sre},
+    {"_string_ops", PyInit__string_ops},
 #if defined(MS_WINDOWS_DESKTOP) || defined(MS_WINDOWS_SYSTEM) || defined(MS_WINDOWS_GAMES)
     {"winreg", PyInit_winreg},
 #endif

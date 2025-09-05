@@ -317,68 +317,68 @@ then
        # ac_sys_system and ac_sys_release are used for setting
        # a lot of different things including 'define_xopen_source'
        # in the case statement below.
-	case "$host" in
-	*-*-linux-android*)
-		ac_sys_system=Linux-android
-		;;
-	*-*-linux*)
-		ac_sys_system=Linux
-		;;
-	*-*-cygwin*)
-		ac_sys_system=Cygwin
-		;;
-	*-apple-ios*)
-		ac_sys_system=iOS
-		;;
-	*-*-darwin*)
-		ac_sys_system=Darwin
-		;;
-	*-*-vxworks*)
-	    ac_sys_system=VxWorks
-	    ;;
-	*-*-emscripten)
-	    ac_sys_system=Emscripten
-	    ;;
-	*-*-wasi*)
-	    ac_sys_system=WASI
-	    ;;
-	*)
-		# for now, limit cross builds to known configurations
-		MACHDEP="unknown"
-		AC_MSG_ERROR([cross build not supported for $host])
-	esac
-	ac_sys_release=
+        case "$host" in
+        *-*-linux-android*)
+                ac_sys_system=Linux-android
+                ;;
+        *-*-linux*)
+                ac_sys_system=Linux
+                ;;
+        *-*-cygwin*)
+                ac_sys_system=Cygwin
+                ;;
+        *-apple-ios*)
+                ac_sys_system=iOS
+                ;;
+        *-*-darwin*)
+                ac_sys_system=Darwin
+                ;;
+        *-*-vxworks*)
+            ac_sys_system=VxWorks
+            ;;
+        *-*-emscripten)
+            ac_sys_system=Emscripten
+            ;;
+        *-*-wasi*)
+            ac_sys_system=WASI
+            ;;
+        *)
+                # for now, limit cross builds to known configurations
+                MACHDEP="unknown"
+                AC_MSG_ERROR([cross build not supported for $host])
+        esac
+        ac_sys_release=
     else
-	ac_sys_system=`uname -s`
-	if test "$ac_sys_system" = "AIX" \
-	-o "$ac_sys_system" = "UnixWare" -o "$ac_sys_system" = "OpenUNIX"; then
-		ac_sys_release=`uname -v`
-	else
-		ac_sys_release=`uname -r`
-	fi
+        ac_sys_system=`uname -s`
+        if test "$ac_sys_system" = "AIX" \
+        -o "$ac_sys_system" = "UnixWare" -o "$ac_sys_system" = "OpenUNIX"; then
+                ac_sys_release=`uname -v`
+        else
+                ac_sys_release=`uname -r`
+        fi
     fi
     ac_md_system=`echo $ac_sys_system |
-			tr -d '[/ ]' | tr '[[A-Z]]' '[[a-z]]'`
+                        tr -d '[/ ]' | tr '[[A-Z]]' '[[a-z]]'`
     ac_md_release=`echo $ac_sys_release |
-			tr -d '[/ ]' | sed 's/^[[A-Z]]\.//' | sed 's/\..*//'`
+                        tr -d '[/ ]' | sed 's/^[[A-Z]]\.//' | sed 's/\..*//'`
     MACHDEP="$ac_md_system$ac_md_release"
 
     case $MACHDEP in
-	aix*) MACHDEP="aix";;
-	freebsd*) MACHDEP="freebsd";;
-	linux-android*) MACHDEP="android";;
-	linux*) MACHDEP="linux";;
-	cygwin*) MACHDEP="cygwin";;
-	darwin*) MACHDEP="darwin";;
-	'')	MACHDEP="unknown";;
+        aix*) MACHDEP="aix";;
+        freebsd*) MACHDEP="freebsd";;
+        linux-android*) MACHDEP="android";;
+        linux*) MACHDEP="linux";;
+        cygwin*) MACHDEP="cygwin";;
+        darwin*) MACHDEP="darwin";;
+        '')	MACHDEP="unknown";;
     esac
 
     if test "$ac_sys_system" = "SunOS"; then
-	# For Solaris, there isn't an OS version specific macro defined
-	# in most compilers, so we define one here.
-	SUNOS_VERSION=`echo $ac_sys_release | sed -e 's!\.\([0-9]\)$!.0\1!g' | tr -d '.'`
-	AC_DEFINE_UNQUOTED([Py_SUNOS_VERSION], [$SUNOS_VERSION],
-	                   [The version of SunOS/Solaris as reported by `uname -r' without the dot.])
+        # For Solaris, there isn't an OS version specific macro defined
+        # in most compilers, so we define one here.
+        SUNOS_VERSION=`echo $ac_sys_release | sed -e 's!\.\([0-9]\)$!.0\1!g' | tr -d '.'`
+        AC_DEFINE_UNQUOTED([Py_SUNOS_VERSION], [$SUNOS_VERSION],
+                           [The version of SunOS/Solaris as reported by `uname -r' without the dot.])
     fi
 fi
 AC_MSG_RESULT(["$MACHDEP"])
@@ -416,83 +416,83 @@ AC_SUBST([host_exec_prefix])
 # either put the platform scripts folder in the path, or specify CC etc,
 # configure will fail.
 if test -z "$AR"; then
-	case "$host" in
-		aarch64-apple-ios*-simulator) AR=arm64-apple-ios-simulator-ar ;;
-		aarch64-apple-ios*)           AR=arm64-apple-ios-ar ;;
-		x86_64-apple-ios*-simulator)  AR=x86_64-apple-ios-simulator-ar ;;
-		*)
-	esac
+        case "$host" in
+                aarch64-apple-ios*-simulator) AR=arm64-apple-ios-simulator-ar ;;
+                aarch64-apple-ios*)           AR=arm64-apple-ios-ar ;;
+                x86_64-apple-ios*-simulator)  AR=x86_64-apple-ios-simulator-ar ;;
+                *)
+        esac
 fi
 if test -z "$CC"; then
-	case "$host" in
-		aarch64-apple-ios*-simulator) CC=arm64-apple-ios-simulator-clang ;;
-		aarch64-apple-ios*)           CC=arm64-apple-ios-clang ;;
-		x86_64-apple-ios*-simulator)  CC=x86_64-apple-ios-simulator-clang ;;
-		*)
-	esac
+        case "$host" in
+                aarch64-apple-ios*-simulator) CC=arm64-apple-ios-simulator-clang ;;
+                aarch64-apple-ios*)           CC=arm64-apple-ios-clang ;;
+                x86_64-apple-ios*-simulator)  CC=x86_64-apple-ios-simulator-clang ;;
+                *)
+        esac
 fi
 if test -z "$CPP"; then
-	case "$host" in
-		aarch64-apple-ios*-simulator) CPP=arm64-apple-ios-simulator-cpp ;;
-		aarch64-apple-ios*)           CPP=arm64-apple-ios-cpp ;;
-		x86_64-apple-ios*-simulator)  CPP=x86_64-apple-ios-simulator-cpp ;;
-		*)
-	esac
+        case "$host" in
+                aarch64-apple-ios*-simulator) CPP=arm64-apple-ios-simulator-cpp ;;
+                aarch64-apple-ios*)           CPP=arm64-apple-ios-cpp ;;
+                x86_64-apple-ios*-simulator)  CPP=x86_64-apple-ios-simulator-cpp ;;
+                *)
+        esac
 fi
 if test -z "$CXX"; then
-	case "$host" in
-		aarch64-apple-ios*-simulator) CXX=arm64-apple-ios-simulator-clang++ ;;
-		aarch64-apple-ios*)           CXX=arm64-apple-ios-clang++ ;;
-		x86_64-apple-ios*-simulator)  CXX=x86_64-apple-ios-simulator-clang++ ;;
-		*)
-	esac
+        case "$host" in
+                aarch64-apple-ios*-simulator) CXX=arm64-apple-ios-simulator-clang++ ;;
+                aarch64-apple-ios*)           CXX=arm64-apple-ios-clang++ ;;
+                x86_64-apple-ios*-simulator)  CXX=x86_64-apple-ios-simulator-clang++ ;;
+                *)
+        esac
 fi
 
 AC_MSG_CHECKING([for --enable-universalsdk])
 AC_ARG_ENABLE([universalsdk],
-	AS_HELP_STRING([--enable-universalsdk@<:@=SDKDIR@:>@],
-	               [create a universal binary build.
-	                SDKDIR specifies which macOS SDK should be used to perform the build,
-	                see Mac/README.rst. (default is no)]),
+        AS_HELP_STRING([--enable-universalsdk@<:@=SDKDIR@:>@],
+                       [create a universal binary build.
+                        SDKDIR specifies which macOS SDK should be used to perform the build,
+                        see Mac/README.rst. (default is no)]),
 [
-	case $enableval in
-	yes)
-		# Locate the best usable SDK, see Mac/README for more
-		# information
-		enableval="`/usr/bin/xcodebuild -version -sdk macosx Path 2>/dev/null`"
-		if ! ( echo $enableval | grep -E '\.sdk' 1>/dev/null )
-		then
-			enableval=/Developer/SDKs/MacOSX10.4u.sdk
-			if test ! -d "${enableval}"
-			then
-				enableval=/
-			fi
-		fi
-		;;
-	esac
-	case $enableval in
-	no)
-		UNIVERSALSDK=
-		enable_universalsdk=
-		;;
-	*)
-		UNIVERSALSDK=$enableval
-		if test ! -d "${UNIVERSALSDK}"
-		then
-			AC_MSG_ERROR([--enable-universalsdk specifies non-existing SDK: ${UNIVERSALSDK}])
-		fi
-		;;
-	esac
+        case $enableval in
+        yes)
+                # Locate the best usable SDK, see Mac/README for more
+                # information
+                enableval="`/usr/bin/xcodebuild -version -sdk macosx Path 2>/dev/null`"
+                if ! ( echo $enableval | grep -E '\.sdk' 1>/dev/null )
+                then
+                        enableval=/Developer/SDKs/MacOSX10.4u.sdk
+                        if test ! -d "${enableval}"
+                        then
+                                enableval=/
+                        fi
+                fi
+                ;;
+        esac
+        case $enableval in
+        no)
+                UNIVERSALSDK=
+                enable_universalsdk=
+                ;;
+        *)
+                UNIVERSALSDK=$enableval
+                if test ! -d "${UNIVERSALSDK}"
+                then
+                        AC_MSG_ERROR([--enable-universalsdk specifies non-existing SDK: ${UNIVERSALSDK}])
+                fi
+                ;;
+        esac
 
 ],[
-   	UNIVERSALSDK=
-	enable_universalsdk=
+        UNIVERSALSDK=
+        enable_universalsdk=
 ])
 if test -n "${UNIVERSALSDK}"
 then
-	AC_MSG_RESULT([${UNIVERSALSDK}])
+        AC_MSG_RESULT([${UNIVERSALSDK}])
 else
-	AC_MSG_RESULT([no])
+        AC_MSG_RESULT([no])
 fi
 AC_SUBST([UNIVERSALSDK])
 
@@ -504,13 +504,13 @@ ARCH_RUN_32BIT=""
 UNIVERSAL_ARCHS="32-bit"
 if test "`uname -s`" = "Darwin"
 then
-	if test -n "${UNIVERSALSDK}"
-	then
-		if test -z "`/usr/bin/file -L "${UNIVERSALSDK}/usr/lib/libSystem.dylib" | grep ppc`"
-		then
-			UNIVERSAL_ARCHS="intel"
-		fi
-	fi
+        if test -n "${UNIVERSALSDK}"
+        then
+                if test -z "`/usr/bin/file -L "${UNIVERSALSDK}/usr/lib/libSystem.dylib" | grep ppc`"
+                then
+                        UNIVERSAL_ARCHS="intel"
+                fi
+        fi
 fi
 
 AC_SUBST([LIPO_32BIT_FLAGS])
@@ -524,14 +524,14 @@ AC_ARG_WITH([universal-archs],
                     "64-bit", "3-way", or "all")
                     see Mac/README.rst]),
 [
-	UNIVERSAL_ARCHS="$withval"
+        UNIVERSAL_ARCHS="$withval"
 ],
 [])
 if test -n "${UNIVERSALSDK}"
 then
-	AC_MSG_RESULT([${UNIVERSAL_ARCHS}])
+        AC_MSG_RESULT([${UNIVERSAL_ARCHS}])
 else
-	AC_MSG_RESULT([no])
+        AC_MSG_RESULT([no])
 fi
 
 AC_ARG_WITH([framework-name],
@@ -555,149 +555,149 @@ AC_ARG_ENABLE([framework],
                               optional INSTALLDIR specifies the installation path. see Mac/README.rst
                               (default is no)]),
 [
-	case $enableval in
-	yes)
-		case $ac_sys_system in
-			Darwin) enableval=/Library/Frameworks ;;
-			iOS)    enableval=iOS/Frameworks/\$\(MULTIARCH\) ;;
-			*) AC_MSG_ERROR([Unknown platform for framework build])
-		esac
-	esac
+        case $enableval in
+        yes)
+                case $ac_sys_system in
+                        Darwin) enableval=/Library/Frameworks ;;
+                        iOS)    enableval=iOS/Frameworks/\$\(MULTIARCH\) ;;
+                        *) AC_MSG_ERROR([Unknown platform for framework build])
+                esac
+        esac
 
-	case $enableval in
-	no)
-		case $ac_sys_system in
-			iOS) AC_MSG_ERROR([iOS builds must use --enable-framework]) ;;
-			*)
-				PYTHONFRAMEWORK=
-				PYTHONFRAMEWORKDIR=no-framework
-				PYTHONFRAMEWORKPREFIX=
-				PYTHONFRAMEWORKINSTALLDIR=
-				PYTHONFRAMEWORKINSTALLNAMEPREFIX=
-				RESSRCDIR=
-				FRAMEWORKINSTALLFIRST=
-				FRAMEWORKINSTALLLAST=
-				FRAMEWORKALTINSTALLFIRST=
-				FRAMEWORKALTINSTALLLAST=
-				FRAMEWORKPYTHONW=
-				INSTALLTARGETS="commoninstall bininstall maninstall"
+        case $enableval in
+        no)
+                case $ac_sys_system in
+                        iOS) AC_MSG_ERROR([iOS builds must use --enable-framework]) ;;
+                        *)
+                                PYTHONFRAMEWORK=
+                                PYTHONFRAMEWORKDIR=no-framework
+                                PYTHONFRAMEWORKPREFIX=
+                                PYTHONFRAMEWORKINSTALLDIR=
+                                PYTHONFRAMEWORKINSTALLNAMEPREFIX=
+                                RESSRCDIR=
+                                FRAMEWORKINSTALLFIRST=
+                                FRAMEWORKINSTALLLAST=
+                                FRAMEWORKALTINSTALLFIRST=
+                                FRAMEWORKALTINSTALLLAST=
+                                FRAMEWORKPYTHONW=
+                                INSTALLTARGETS="commoninstall bininstall maninstall"
 
-				if test "x${prefix}" = "xNONE"; then
-					FRAMEWORKUNIXTOOLSPREFIX="${ac_default_prefix}"
-				else
-					FRAMEWORKUNIXTOOLSPREFIX="${prefix}"
-				fi
-				enable_framework=
-		esac
-		;;
-	*)
-		PYTHONFRAMEWORKPREFIX="${enableval}"
-		PYTHONFRAMEWORKINSTALLDIR=$PYTHONFRAMEWORKPREFIX/$PYTHONFRAMEWORKDIR
+                                if test "x${prefix}" = "xNONE"; then
+                                        FRAMEWORKUNIXTOOLSPREFIX="${ac_default_prefix}"
+                                else
+                                        FRAMEWORKUNIXTOOLSPREFIX="${prefix}"
+                                fi
+                                enable_framework=
+                esac
+                ;;
+        *)
+                PYTHONFRAMEWORKPREFIX="${enableval}"
+                PYTHONFRAMEWORKINSTALLDIR=$PYTHONFRAMEWORKPREFIX/$PYTHONFRAMEWORKDIR
 
-		case $ac_sys_system in #(
-			Darwin) :
-				FRAMEWORKINSTALLFIRST="frameworkinstallversionedstructure"
-				FRAMEWORKALTINSTALLFIRST="frameworkinstallversionedstructure "
-				FRAMEWORKINSTALLLAST="frameworkinstallmaclib frameworkinstallapps frameworkinstallunixtools"
-				FRAMEWORKALTINSTALLLAST="frameworkinstallmaclib frameworkinstallapps frameworkaltinstallunixtools"
-				FRAMEWORKPYTHONW="frameworkpythonw"
-				FRAMEWORKINSTALLAPPSPREFIX="/Applications"
-				INSTALLTARGETS="commoninstall bininstall maninstall"
+                case $ac_sys_system in #(
+                        Darwin) :
+                                FRAMEWORKINSTALLFIRST="frameworkinstallversionedstructure"
+                                FRAMEWORKALTINSTALLFIRST="frameworkinstallversionedstructure "
+                                FRAMEWORKINSTALLLAST="frameworkinstallmaclib frameworkinstallapps frameworkinstallunixtools"
+                                FRAMEWORKALTINSTALLLAST="frameworkinstallmaclib frameworkinstallapps frameworkaltinstallunixtools"
+                                FRAMEWORKPYTHONW="frameworkpythonw"
+                                FRAMEWORKINSTALLAPPSPREFIX="/Applications"
+                                INSTALLTARGETS="commoninstall bininstall maninstall"
 
-				if test "x${prefix}" = "xNONE" ; then
-					FRAMEWORKUNIXTOOLSPREFIX="${ac_default_prefix}"
+                                if test "x${prefix}" = "xNONE" ; then
+                                        FRAMEWORKUNIXTOOLSPREFIX="${ac_default_prefix}"
 
-				else
-					FRAMEWORKUNIXTOOLSPREFIX="${prefix}"
-				fi
+                                else
+                                        FRAMEWORKUNIXTOOLSPREFIX="${prefix}"
+                                fi
 
-				case "${enableval}" in
-				/System*)
-					FRAMEWORKINSTALLAPPSPREFIX="/Applications"
-					if test "${prefix}" = "NONE" ; then
-						# See below
-						FRAMEWORKUNIXTOOLSPREFIX="/usr"
-					fi
-					;;
+                                case "${enableval}" in
+                                /System*)
+                                        FRAMEWORKINSTALLAPPSPREFIX="/Applications"
+                                        if test "${prefix}" = "NONE" ; then
+                                                # See below
+                                                FRAMEWORKUNIXTOOLSPREFIX="/usr"
+                                        fi
+                                        ;;
 
-				/Library*)
-					FRAMEWORKINSTALLAPPSPREFIX="/Applications"
-					;;
+                                /Library*)
+                                        FRAMEWORKINSTALLAPPSPREFIX="/Applications"
+                                        ;;
 
-				*/Library/Frameworks)
-					MDIR="`dirname "${enableval}"`"
-					MDIR="`dirname "${MDIR}"`"
-					FRAMEWORKINSTALLAPPSPREFIX="${MDIR}/Applications"
+                                */Library/Frameworks)
+                                        MDIR="`dirname "${enableval}"`"
+                                        MDIR="`dirname "${MDIR}"`"
+                                        FRAMEWORKINSTALLAPPSPREFIX="${MDIR}/Applications"
 
-					if test "${prefix}" = "NONE"; then
-						# User hasn't specified the
-						# --prefix option, but wants to install
-						# the framework in a non-default location,
-						# ensure that the compatibility links get
-						# installed relative to that prefix as well
-						# instead of in /usr/local.
-						FRAMEWORKUNIXTOOLSPREFIX="${MDIR}"
-					fi
-					;;
+                                        if test "${prefix}" = "NONE"; then
+                                                # User hasn't specified the
+                                                # --prefix option, but wants to install
+                                                # the framework in a non-default location,
+                                                # ensure that the compatibility links get
+                                                # installed relative to that prefix as well
+                                                # instead of in /usr/local.
+                                                FRAMEWORKUNIXTOOLSPREFIX="${MDIR}"
+                                        fi
+                                        ;;
 
-				*)
-					FRAMEWORKINSTALLAPPSPREFIX="/Applications"
-					;;
-				esac
+                                *)
+                                        FRAMEWORKINSTALLAPPSPREFIX="/Applications"
+                                        ;;
+                                esac
 
-				prefix=$PYTHONFRAMEWORKINSTALLDIR/Versions/$VERSION
-				PYTHONFRAMEWORKINSTALLNAMEPREFIX=${prefix}
-				RESSRCDIR=Mac/Resources/framework
+                                prefix=$PYTHONFRAMEWORKINSTALLDIR/Versions/$VERSION
+                                PYTHONFRAMEWORKINSTALLNAMEPREFIX=${prefix}
+                                RESSRCDIR=Mac/Resources/framework
 
-				# Add files for Mac specific code to the list of output
-				# files:
-				AC_CONFIG_FILES([Mac/Makefile])
-				AC_CONFIG_FILES([Mac/PythonLauncher/Makefile])
-				AC_CONFIG_FILES([Mac/Resources/framework/Info.plist])
-				AC_CONFIG_FILES([Mac/Resources/app/Info.plist])
-				;;
-			iOS) :
-				FRAMEWORKINSTALLFIRST="frameworkinstallunversionedstructure"
-				FRAMEWORKALTINSTALLFIRST="frameworkinstallunversionedstructure "
-				FRAMEWORKINSTALLLAST="frameworkinstallmobileheaders"
-				FRAMEWORKALTINSTALLLAST="frameworkinstallmobileheaders"
-				FRAMEWORKPYTHONW=
-				INSTALLTARGETS="libinstall inclinstall sharedinstall"
+                                # Add files for Mac specific code to the list of output
+                                # files:
+                                AC_CONFIG_FILES([Mac/Makefile])
+                                AC_CONFIG_FILES([Mac/PythonLauncher/Makefile])
+                                AC_CONFIG_FILES([Mac/Resources/framework/Info.plist])
+                                AC_CONFIG_FILES([Mac/Resources/app/Info.plist])
+                                ;;
+                        iOS) :
+                                FRAMEWORKINSTALLFIRST="frameworkinstallunversionedstructure"
+                                FRAMEWORKALTINSTALLFIRST="frameworkinstallunversionedstructure "
+                                FRAMEWORKINSTALLLAST="frameworkinstallmobileheaders"
+                                FRAMEWORKALTINSTALLLAST="frameworkinstallmobileheaders"
+                                FRAMEWORKPYTHONW=
+                                INSTALLTARGETS="libinstall inclinstall sharedinstall"
 
-				prefix=$PYTHONFRAMEWORKPREFIX
-				PYTHONFRAMEWORKINSTALLNAMEPREFIX="@rpath/$PYTHONFRAMEWORKDIR"
-				RESSRCDIR=iOS/Resources
+                                prefix=$PYTHONFRAMEWORKPREFIX
+                                PYTHONFRAMEWORKINSTALLNAMEPREFIX="@rpath/$PYTHONFRAMEWORKDIR"
+                                RESSRCDIR=iOS/Resources
 
-				AC_CONFIG_FILES([iOS/Resources/Info.plist])
-				;;
-			*)
-				AC_MSG_ERROR([Unknown platform for framework build])
-				;;
-			esac
-		esac
-	],[
-	case $ac_sys_system in
-		iOS) AC_MSG_ERROR([iOS builds must use --enable-framework]) ;;
-		*)
-			PYTHONFRAMEWORK=
-			PYTHONFRAMEWORKDIR=no-framework
-			PYTHONFRAMEWORKPREFIX=
-			PYTHONFRAMEWORKINSTALLDIR=
-			PYTHONFRAMEWORKINSTALLNAMEPREFIX=
-			RESSRCDIR=
-			FRAMEWORKINSTALLFIRST=
-			FRAMEWORKINSTALLLAST=
-			FRAMEWORKALTINSTALLFIRST=
-			FRAMEWORKALTINSTALLLAST=
-			FRAMEWORKPYTHONW=
-			INSTALLTARGETS="commoninstall bininstall maninstall"
-			if test "x${prefix}" = "xNONE" ; then
-				FRAMEWORKUNIXTOOLSPREFIX="${ac_default_prefix}"
-			else
-				FRAMEWORKUNIXTOOLSPREFIX="${prefix}"
-			fi
-			enable_framework=
-	esac
+                                AC_CONFIG_FILES([iOS/Resources/Info.plist])
+                                ;;
+                        *)
+                                AC_MSG_ERROR([Unknown platform for framework build])
+                                ;;
+                        esac
+                esac
+        ],[
+        case $ac_sys_system in
+                iOS) AC_MSG_ERROR([iOS builds must use --enable-framework]) ;;
+                *)
+                        PYTHONFRAMEWORK=
+                        PYTHONFRAMEWORKDIR=no-framework
+                        PYTHONFRAMEWORKPREFIX=
+                        PYTHONFRAMEWORKINSTALLDIR=
+                        PYTHONFRAMEWORKINSTALLNAMEPREFIX=
+                        RESSRCDIR=
+                        FRAMEWORKINSTALLFIRST=
+                        FRAMEWORKINSTALLLAST=
+                        FRAMEWORKALTINSTALLFIRST=
+                        FRAMEWORKALTINSTALLLAST=
+                        FRAMEWORKPYTHONW=
+                        INSTALLTARGETS="commoninstall bininstall maninstall"
+                        if test "x${prefix}" = "xNONE" ; then
+                                FRAMEWORKUNIXTOOLSPREFIX="${ac_default_prefix}"
+                        else
+                                FRAMEWORKUNIXTOOLSPREFIX="${prefix}"
+                        fi
+                        enable_framework=
+        esac
 ])
 AC_SUBST([PYTHONFRAMEWORK])
 AC_SUBST([PYTHONFRAMEWORKIDENTIFIER])
@@ -761,63 +761,63 @@ AC_SUBST([APP_STORE_COMPLIANCE_PATCH])
 
 AC_SUBST([_PYTHON_HOST_PLATFORM])
 if test "$cross_compiling" = yes; then
-	case "$host" in
-	*-*-linux*)
-		case "$host_cpu" in
-		arm*)
-			_host_ident=arm
-			;;
-		*)
-			_host_ident=$host_cpu
-		esac
-		;;
-	*-*-cygwin*)
-		_host_ident=
-		;;
-	*-apple-ios*)
-		_host_os=`echo $host | cut -d '-' -f3`
-		_host_device=`echo $host | cut -d '-' -f4`
-		_host_device=${_host_device:=os}
+        case "$host" in
+        *-*-linux*)
+                case "$host_cpu" in
+                arm*)
+                        _host_ident=arm
+                        ;;
+                *)
+                        _host_ident=$host_cpu
+                esac
+                ;;
+        *-*-cygwin*)
+                _host_ident=
+                ;;
+        *-apple-ios*)
+                _host_os=`echo $host | cut -d '-' -f3`
+                _host_device=`echo $host | cut -d '-' -f4`
+                _host_device=${_host_device:=os}
 
-		# IPHONEOS_DEPLOYMENT_TARGET is the minimum supported iOS version
-		AC_MSG_CHECKING([iOS deployment target])
-		IPHONEOS_DEPLOYMENT_TARGET=$(echo ${_host_os} | cut -c4-)
-		IPHONEOS_DEPLOYMENT_TARGET=${IPHONEOS_DEPLOYMENT_TARGET:=13.0}
-		AC_MSG_RESULT([$IPHONEOS_DEPLOYMENT_TARGET])
+                # IPHONEOS_DEPLOYMENT_TARGET is the minimum supported iOS version
+                AC_MSG_CHECKING([iOS deployment target])
+                IPHONEOS_DEPLOYMENT_TARGET=$(echo ${_host_os} | cut -c4-)
+                IPHONEOS_DEPLOYMENT_TARGET=${IPHONEOS_DEPLOYMENT_TARGET:=13.0}
+                AC_MSG_RESULT([$IPHONEOS_DEPLOYMENT_TARGET])
 
-		case "$host_cpu" in
-			aarch64)
-				_host_ident=${IPHONEOS_DEPLOYMENT_TARGET}-arm64-iphone${_host_device}
-				;;
-			*)
-				_host_ident=${IPHONEOS_DEPLOYMENT_TARGET}-$host_cpu-iphone${_host_device}
-				;;
-		esac
-		;;
-	*-*-darwin*)
-		case "$host_cpu" in
-		arm*)
-			_host_ident=arm
-			;;
-		*)
-			_host_ident=$host_cpu
-		esac
-		;;
-	*-*-vxworks*)
-		_host_ident=$host_cpu
-		;;
-	*-*-emscripten)
-		_host_ident=$(emcc -dumpversion | cut -f1 -d-)-$host_cpu
-		;;
-	wasm32-*-* | wasm64-*-*)
-		_host_ident=$host_cpu
-		;;
-	*)
-		# for now, limit cross builds to known configurations
-		MACHDEP="unknown"
-		AC_MSG_ERROR([cross build not supported for $host])
-	esac
-	_PYTHON_HOST_PLATFORM="$MACHDEP${_host_ident:+-$_host_ident}"
+                case "$host_cpu" in
+                        aarch64)
+                                _host_ident=${IPHONEOS_DEPLOYMENT_TARGET}-arm64-iphone${_host_device}
+                                ;;
+                        *)
+                                _host_ident=${IPHONEOS_DEPLOYMENT_TARGET}-$host_cpu-iphone${_host_device}
+                                ;;
+                esac
+                ;;
+        *-*-darwin*)
+                case "$host_cpu" in
+                arm*)
+                        _host_ident=arm
+                        ;;
+                *)
+                        _host_ident=$host_cpu
+                esac
+                ;;
+        *-*-vxworks*)
+                _host_ident=$host_cpu
+                ;;
+        *-*-emscripten)
+                _host_ident=$(emcc -dumpversion | cut -f1 -d-)-$host_cpu
+                ;;
+        wasm32-*-* | wasm64-*-*)
+                _host_ident=$host_cpu
+                ;;
+        *)
+                # for now, limit cross builds to known configurations
+                MACHDEP="unknown"
+                AC_MSG_ERROR([cross build not supported for $host])
+        esac
+        _PYTHON_HOST_PLATFORM="$MACHDEP${_host_ident:+-$_host_ident}"
 fi
 
 # Some systems cannot stand _XOPEN_SOURCE being defined at all; they
@@ -1004,59 +1004,59 @@ then
   fi
   AC_MSG_RESULT([$SDKROOT])
 
-	# Compiler selection on MacOSX is more complicated than
-	# AC_PROG_CC can handle, see Mac/README for more
-	# information
-	if test -z "${CC}"
-	then
-		found_gcc=
-		found_clang=
-		as_save_IFS=$IFS; IFS=:
-		for as_dir in $PATH
-		do
-			IFS=$as_save_IFS
-			if test -x "${as_dir}/gcc"; then
-				if test -z "${found_gcc}"; then
-					found_gcc="${as_dir}/gcc"
-				fi
-			fi
-			if test -x "${as_dir}/clang"; then
-				if test -z "${found_clang}"; then
-					found_clang="${as_dir}/clang"
-				fi
-			fi
-		done
-		IFS=$as_save_IFS
+        # Compiler selection on MacOSX is more complicated than
+        # AC_PROG_CC can handle, see Mac/README for more
+        # information
+        if test -z "${CC}"
+        then
+                found_gcc=
+                found_clang=
+                as_save_IFS=$IFS; IFS=:
+                for as_dir in $PATH
+                do
+                        IFS=$as_save_IFS
+                        if test -x "${as_dir}/gcc"; then
+                                if test -z "${found_gcc}"; then
+                                        found_gcc="${as_dir}/gcc"
+                                fi
+                        fi
+                        if test -x "${as_dir}/clang"; then
+                                if test -z "${found_clang}"; then
+                                        found_clang="${as_dir}/clang"
+                                fi
+                        fi
+                done
+                IFS=$as_save_IFS
 
-		if test -n "$found_gcc" -a -n "$found_clang"
-		then
-			if test -n "`"$found_gcc" --version | grep llvm-gcc`"
-			then
-				AC_MSG_NOTICE([Detected llvm-gcc, falling back to clang])
-				CC="$found_clang"
-				CXX="$found_clang++"
-			fi
+                if test -n "$found_gcc" -a -n "$found_clang"
+                then
+                        if test -n "`"$found_gcc" --version | grep llvm-gcc`"
+                        then
+                                AC_MSG_NOTICE([Detected llvm-gcc, falling back to clang])
+                                CC="$found_clang"
+                                CXX="$found_clang++"
+                        fi
 
 
-		elif test -z "$found_gcc" -a -n "$found_clang"
-		then
-			AC_MSG_NOTICE([No GCC found, use CLANG])
-			CC="$found_clang"
-			CXX="$found_clang++"
+                elif test -z "$found_gcc" -a -n "$found_clang"
+                then
+                        AC_MSG_NOTICE([No GCC found, use CLANG])
+                        CC="$found_clang"
+                        CXX="$found_clang++"
 
-		elif test -z "$found_gcc" -a -z "$found_clang"
-		then
-			found_clang=`/usr/bin/xcrun -find clang 2>/dev/null`
-			if test -n "${found_clang}"
-			then
-				AC_MSG_NOTICE([Using clang from Xcode.app])
-				CC="${found_clang}"
-				CXX="`/usr/bin/xcrun -find clang++`"
+                elif test -z "$found_gcc" -a -z "$found_clang"
+                then
+                        found_clang=`/usr/bin/xcrun -find clang 2>/dev/null`
+                        if test -n "${found_clang}"
+                        then
+                                AC_MSG_NOTICE([Using clang from Xcode.app])
+                                CC="${found_clang}"
+                                CXX="`/usr/bin/xcrun -find clang++`"
 
-			# else: use default behaviour
-			fi
-		fi
-	fi
+                        # else: use default behaviour
+                        fi
+                fi
+        fi
 fi
 AC_PROG_CC
 AC_PROG_CPP
@@ -1091,7 +1091,7 @@ cat > conftest.c <<EOF
 EOF
 
 if $CPP $CPPFLAGS conftest.c >conftest.out 2>/dev/null; then
-  ac_cv_cc_name=`grep -v '^#' conftest.out | grep -v '^ *$' | tr -d ' 	'`
+  ac_cv_cc_name=`grep -v '^#' conftest.out | grep -v '^ *$' | tr -d '   '`
   AS_VAR_IF([CC_BASENAME], [mpicc], [ac_cv_cc_name=mpicc])
 else
   ac_cv_cc_name="unknown"
@@ -1127,18 +1127,18 @@ then
         clang)             AC_PATH_TOOL([CXX], [clang++], [clang++], [notfound]) ;;
         icc)               AC_PATH_TOOL([CXX], [icpc], [icpc], [notfound]) ;;
         esac
-	if test "$CXX" = "notfound"
-	then
-		CXX=""
-	fi
+        if test "$CXX" = "notfound"
+        then
+                CXX=""
+        fi
 fi
 if test -z "$CXX"
 then
-	AC_CHECK_TOOLS([CXX], [$CCC c++ g++ gcc CC cxx cc++ cl], [notfound])
-	if test "$CXX" = "notfound"
-	then
-		CXX=""
-	fi
+        AC_CHECK_TOOLS([CXX], [$CCC c++ g++ gcc CC cxx cc++ cl], [notfound])
+        if test "$CXX" = "notfound"
+        then
+                CXX=""
+        fi
 fi
 if test "$preset_cxx" != "$CXX"
 then
@@ -1152,7 +1152,7 @@ fi
 
 AC_MSG_CHECKING([for the platform triplet based on compiler characteristics])
 if $CPP $CPPFLAGS $srcdir/Misc/platform_triplet.c >conftest.out 2>/dev/null; then
-  PLATFORM_TRIPLET=`grep '^PLATFORM_TRIPLET=' conftest.out | tr -d ' 	'`
+  PLATFORM_TRIPLET=`grep '^PLATFORM_TRIPLET=' conftest.out | tr -d '    '`
   PLATFORM_TRIPLET="${PLATFORM_TRIPLET@%:@PLATFORM_TRIPLET=}"
   AC_MSG_RESULT([$PLATFORM_TRIPLET])
 else
@@ -1337,7 +1337,7 @@ AC_MSG_CHECKING([for --with-suffix])
 AC_ARG_WITH([suffix],
             [AS_HELP_STRING([--with-suffix=SUFFIX], [set executable suffix to SUFFIX (default is empty, yes is mapped to '.exe')])],
 [
-	AS_CASE([$with_suffix],
+        AS_CASE([$with_suffix],
     [no], [EXEEXT=],
     [yes], [EXEEXT=.exe],
     [EXEEXT=$with_suffix]
@@ -1367,8 +1367,8 @@ then
     AC_MSG_RESULT([yes])
     BUILDEXEEXT=.exe
 else
-	AC_MSG_RESULT([no])
-	BUILDEXEEXT=$EXEEXT
+        AC_MSG_RESULT([no])
+        BUILDEXEEXT=$EXEEXT
 fi
 rmdir CaseSensitiveTestDir
 
@@ -1383,7 +1383,7 @@ AC_SUBST([LIBRARY])
 AC_MSG_CHECKING([LIBRARY])
 if test -z "$LIBRARY"
 then
-	LIBRARY='libpython$(VERSION)$(ABIFLAGS).a'
+        LIBRARY='libpython$(VERSION)$(ABIFLAGS).a'
 fi
 AC_MSG_RESULT([$LIBRARY])
 
@@ -1427,13 +1427,13 @@ AC_SUBST([LINKCC])
 AC_MSG_CHECKING([LINKCC])
 if test -z "$LINKCC"
 then
-	LINKCC='$(PURIFY) $(CC)'
-	case $ac_sys_system in
-	QNX*)
-	   # qcc must be used because the other compilers do not
-	   # support -N.
-	   LINKCC=qcc;;
-	esac
+        LINKCC='$(PURIFY) $(CC)'
+        case $ac_sys_system in
+        QNX*)
+           # qcc must be used because the other compilers do not
+           # support -N.
+           LINKCC=qcc;;
+        esac
 fi
 AC_MSG_RESULT([$LINKCC])
 
@@ -1446,9 +1446,9 @@ AC_SUBST([EXPORTSFROM])
 AC_MSG_CHECKING([EXPORTSYMS])
 case $ac_sys_system in
 AIX*)
-	EXPORTSYMS="Modules/python.exp"
-	EXPORTSFROM=. # the main executable
-	;;
+        EXPORTSYMS="Modules/python.exp"
+        EXPORTSFROM=. # the main executable
+        ;;
 esac
 AC_MSG_RESULT([$EXPORTSYMS])
 
@@ -1688,11 +1688,11 @@ fi
 
 case $MACHDEP in
 hp*|HP*)
-	# install -d does not work on HP-UX
-	if test -z "$INSTALL"
-	then
-		INSTALL="${srcdir}/install-sh -c"
-	fi
+        # install -d does not work on HP-UX
+        if test -z "$INSTALL"
+        then
+                INSTALL="${srcdir}/install-sh -c"
+        fi
 esac
 AC_PROG_INSTALL
 AC_PROG_MKDIR_P
@@ -1700,10 +1700,10 @@ AC_PROG_MKDIR_P
 # Not every filesystem supports hard links
 AC_SUBST([LN])
 if test -z "$LN" ; then
-	case $ac_sys_system in
-		CYGWIN*) LN="ln -s";;
-		*) LN=ln;;
-	esac
+        case $ac_sys_system in
+                CYGWIN*) LN="ln -s";;
+                *) LN=ln;;
+        esac
 fi
 
 # For calculating the .so ABI tag.
@@ -1863,7 +1863,7 @@ AC_ARG_VAR([PROFILE_TASK], [Python args for PGO generation task])
 AC_MSG_CHECKING([PROFILE_TASK])
 if test -z "$PROFILE_TASK"
 then
-	PROFILE_TASK='-m test --pgo --timeout=$(TESTTIMEOUT)'
+        PROFILE_TASK='-m test --pgo --timeout=$(TESTTIMEOUT)'
 fi
 AC_MSG_RESULT([$PROFILE_TASK])
 
@@ -2302,28 +2302,28 @@ then
             CFLAGS_ALIASING="-fno-strict-aliasing"
         fi
 
-	case $ac_cv_prog_cc_g in
-	yes)
-	    if test "$Py_DEBUG" = 'true' ; then
-		OPT="-g $PYDEBUG_CFLAGS -Wall"
-	    else
-		OPT="-g -O3 -Wall"
-	    fi
-	    ;;
-	*)
-	    OPT="-O3 -Wall"
-	    ;;
-	esac
-
-	case $ac_sys_system in
-	    SCO_SV*) OPT="$OPT -m486 -DSCO5"
-	    ;;
+        case $ac_cv_prog_cc_g in
+        yes)
+            if test "$Py_DEBUG" = 'true' ; then
+                OPT="-g $PYDEBUG_CFLAGS -Wall"
+            else
+                OPT="-g -O3 -Wall"
+            fi
+            ;;
+        *)
+            OPT="-O3 -Wall"
+            ;;
         esac
-	;;
+
+        case $ac_sys_system in
+            SCO_SV*) OPT="$OPT -m486 -DSCO5"
+            ;;
+        esac
+        ;;
 
     *)
-	OPT="-O"
-	;;
+        OPT="-O"
+        ;;
     esac
 fi
 
@@ -2483,22 +2483,22 @@ AS_VAR_IF([ac_cv_gcc_compat], [yes], [
                     [ac_cv_no_strict_aliasing],
        AC_COMPILE_IFELSE(
          [
-	   AC_LANG_PROGRAM([[]], [[]])
-	 ],[
-	   CC="$ac_save_cc -fstrict-aliasing"
+           AC_LANG_PROGRAM([[]], [[]])
+         ],[
+           CC="$ac_save_cc -fstrict-aliasing"
            CFLAGS="$CFLAGS -Werror -Wstrict-aliasing"
            AC_COMPILE_IFELSE(
-	     [
-	       AC_LANG_PROGRAM([[void f(int **x) {}]],
-	         [[double *x; f((int **) &x);]])
-	     ],[
-	       ac_cv_no_strict_aliasing=no
-	     ],[
+             [
+               AC_LANG_PROGRAM([[void f(int **x) {}]],
+                 [[double *x; f((int **) &x);]])
+             ],[
+               ac_cv_no_strict_aliasing=no
+             ],[
                ac_cv_no_strict_aliasing=yes
-	     ])
-	 ],[
-	   ac_cv_no_strict_aliasing=no
-	 ]))
+             ])
+         ],[
+           ac_cv_no_strict_aliasing=no
+         ]))
      CFLAGS="$save_CFLAGS"
      CC="$ac_save_cc"
     AS_VAR_IF([ac_cv_no_strict_aliasing], [yes],
@@ -2556,12 +2556,12 @@ AS_VAR_IF([ac_cv_gcc_compat], [yes], [
                     [ac_cv_enable_implicit_function_declaration_error],
        AC_COMPILE_IFELSE(
          [
-	   AC_LANG_PROGRAM([[]], [[]])
-	 ],[
+           AC_LANG_PROGRAM([[]], [[]])
+         ],[
            ac_cv_enable_implicit_function_declaration_error=yes
-	 ],[
+         ],[
            ac_cv_enable_implicit_function_declaration_error=no
-	 ]))
+         ]))
      CC="$ac_save_cc"
 
     AS_VAR_IF([ac_cv_enable_implicit_function_declaration_error], [yes],
@@ -2572,12 +2572,12 @@ AS_VAR_IF([ac_cv_gcc_compat], [yes], [
      AC_CACHE_CHECK([if we can use visibility in $CC], [ac_cv_enable_visibility],
        AC_COMPILE_IFELSE(
          [
-	   AC_LANG_PROGRAM([[]], [[]])
-	 ],[
+           AC_LANG_PROGRAM([[]], [[]])
+         ],[
            ac_cv_enable_visibility=yes
-	 ],[
+         ],[
            ac_cv_enable_visibility=no
-	 ]))
+         ]))
      CC="$ac_save_cc"
 
     AS_VAR_IF([ac_cv_enable_visibility], [yes],
@@ -2593,9 +2593,9 @@ AS_VAR_IF([ac_cv_gcc_compat], [yes], [
     esac
 
     case $ac_sys_system in
-	SCO_SV*)
-	    BASECFLAGS="$BASECFLAGS -m486 -DSCO5"
-	    ;;
+        SCO_SV*)
+            BASECFLAGS="$BASECFLAGS -m486 -DSCO5"
+            ;;
 
     Darwin*)
         # -Wno-long-double, -no-cpp-precomp, and -mno-fused-madd
@@ -2753,11 +2753,11 @@ AS_VAR_IF([ac_cv_gcc_compat], [yes], [
 ], [
     case $ac_sys_system in
     OpenUNIX*|UnixWare*)
-	BASECFLAGS="$BASECFLAGS -K pentium,host,inline,loop_unroll,alloca "
-	;;
+        BASECFLAGS="$BASECFLAGS -K pentium,host,inline,loop_unroll,alloca "
+        ;;
     SCO_SV*)
-	BASECFLAGS="$BASECFLAGS -belf -Ki486 -DSCO5"
-	;;
+        BASECFLAGS="$BASECFLAGS -belf -Ki486 -DSCO5"
+        ;;
     esac
 ])
 
@@ -2823,7 +2823,7 @@ fi
 
 if test "$ac_arch_flags"
 then
-	BASECFLAGS="$BASECFLAGS $ac_arch_flags"
+        BASECFLAGS="$BASECFLAGS $ac_arch_flags"
 fi
 
 # On some compilers, pthreads are available without further options
@@ -3177,7 +3177,7 @@ AC_CHECK_SIZEOF([off_t], [], [
 
 AC_MSG_CHECKING([whether to enable large file support])
 if test "$ac_cv_sizeof_off_t" -gt "$ac_cv_sizeof_long" -a \
-	"$ac_cv_sizeof_long_long" -ge "$ac_cv_sizeof_off_t"; then
+        "$ac_cv_sizeof_long_long" -ge "$ac_cv_sizeof_off_t"; then
   have_largefile_support="yes"
 else
   have_largefile_support="no"
@@ -3249,19 +3249,19 @@ CC="$ac_save_cc"
 AC_MSG_CHECKING([for --enable-framework])
 if test "$enable_framework"
 then
-	BASECFLAGS="$BASECFLAGS -fno-common -dynamic"
-	# -F. is needed to allow linking to the framework while
-	# in the build location.
-	AC_DEFINE([WITH_NEXT_FRAMEWORK], [1],
+        BASECFLAGS="$BASECFLAGS -fno-common -dynamic"
+        # -F. is needed to allow linking to the framework while
+        # in the build location.
+        AC_DEFINE([WITH_NEXT_FRAMEWORK], [1],
          [Define if you want to produce an OpenStep/Rhapsody framework
          (shared library plus accessory files).])
-	AC_MSG_RESULT([yes])
-	if test $enable_shared = "yes"
-	then
-		AC_MSG_ERROR([Specifying both --enable-shared and --enable-framework is not supported, use only --enable-framework instead])
-	fi
+        AC_MSG_RESULT([yes])
+        if test $enable_shared = "yes"
+        then
+                AC_MSG_ERROR([Specifying both --enable-shared and --enable-framework is not supported, use only --enable-framework instead])
+        fi
 else
-	AC_MSG_RESULT([no])
+        AC_MSG_RESULT([no])
 fi
 
 # Check for --with-dsymutil
@@ -3303,10 +3303,10 @@ case $ac_sys_system/$ac_sys_release in
          dynamic linker (dyld) instead of the old-style (NextStep) dynamic
          linker (rld). Dyld is necessary to support frameworks.])
     AC_MSG_RESULT([always on for Darwin])
-  	;;
+        ;;
   *)
-	AC_MSG_RESULT([no])
-	;;
+        AC_MSG_RESULT([no])
+        ;;
 esac
 
 AC_MSG_CHECKING([for --with-address-sanitizer])
@@ -3388,16 +3388,16 @@ AC_SUBST([LINKFORSHARED])
 # -- usually .so, .sl on HP-UX, .dll on Cygwin
 AC_MSG_CHECKING([the extension of shared libraries])
 if test -z "$SHLIB_SUFFIX"; then
-	case $ac_sys_system in
-	hp*|HP*)
-		case `uname -m` in
-			ia64) SHLIB_SUFFIX=.so;;
-	  		*)    SHLIB_SUFFIX=.sl;;
-		esac
-		;;
-	CYGWIN*)   SHLIB_SUFFIX=.dll;;
-	*)	   SHLIB_SUFFIX=.so;;
-	esac
+        case $ac_sys_system in
+        hp*|HP*)
+                case `uname -m` in
+                        ia64) SHLIB_SUFFIX=.so;;
+                        *)    SHLIB_SUFFIX=.sl;;
+                esac
+                ;;
+        CYGWIN*)   SHLIB_SUFFIX=.dll;;
+        *)	   SHLIB_SUFFIX=.so;;
+        esac
 fi
 AC_MSG_RESULT([$SHLIB_SUFFIX])
 
@@ -3408,132 +3408,132 @@ AC_MSG_RESULT([$SHLIB_SUFFIX])
 AC_MSG_CHECKING([LDSHARED])
 if test -z "$LDSHARED"
 then
-	case $ac_sys_system/$ac_sys_release in
-	AIX*)
-		BLDSHARED="Modules/ld_so_aix \$(CC) -bI:Modules/python.exp"
-		LDSHARED="\$(LIBPL)/ld_so_aix \$(CC) -bI:\$(LIBPL)/python.exp"
-		;;
-	SunOS/5*)
-		if test "$ac_cv_gcc_compat" = "yes" ; then
-			LDSHARED='$(CC) -shared'
-			LDCXXSHARED='$(CXX) -shared'
-		else
-			LDSHARED='$(CC) -G'
-			LDCXXSHARED='$(CXX) -G'
-		fi ;;
-	hp*|HP*)
-		if test "$ac_cv_gcc_compat" = "yes" ; then
-			LDSHARED='$(CC) -shared'
-			LDCXXSHARED='$(CXX) -shared'
-		else
-			LDSHARED='$(CC) -b'
-			LDCXXSHARED='$(CXX) -b'
-		fi ;;
-	Darwin/1.3*)
-		LDSHARED='$(CC) -bundle'
-		LDCXXSHARED='$(CXX) -bundle'
-		if test "$enable_framework" ; then
-			# Link against the framework. All externals should be defined.
-			BLDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
-			LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
-			LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
-		else
-			# No framework. Ignore undefined symbols, assuming they come from Python
-			LDSHARED="$LDSHARED -undefined suppress"
-			LDCXXSHARED="$LDCXXSHARED -undefined suppress"
-		fi ;;
-	Darwin/1.4*|Darwin/5.*|Darwin/6.*)
-		LDSHARED='$(CC) -bundle'
-		LDCXXSHARED='$(CXX) -bundle'
-		if test "$enable_framework" ; then
-			# Link against the framework. All externals should be defined.
-			BLDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
-			LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
-			LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
-		else
-			# No framework, use the Python app as bundle-loader
-			BLDSHARED="$LDSHARED "'-bundle_loader $(BUILDPYTHON)'
-			LDSHARED="$LDSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
-			LDCXXSHARED="$LDCXXSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
-		fi ;;
-	Darwin/*)
-		# Use -undefined dynamic_lookup whenever possible (10.3 and later).
-		# This allows an extension to be used in any Python
+        case $ac_sys_system/$ac_sys_release in
+        AIX*)
+                BLDSHARED="Modules/ld_so_aix \$(CC) -bI:Modules/python.exp"
+                LDSHARED="\$(LIBPL)/ld_so_aix \$(CC) -bI:\$(LIBPL)/python.exp"
+                ;;
+        SunOS/5*)
+                if test "$ac_cv_gcc_compat" = "yes" ; then
+                        LDSHARED='$(CC) -shared'
+                        LDCXXSHARED='$(CXX) -shared'
+                else
+                        LDSHARED='$(CC) -G'
+                        LDCXXSHARED='$(CXX) -G'
+                fi ;;
+        hp*|HP*)
+                if test "$ac_cv_gcc_compat" = "yes" ; then
+                        LDSHARED='$(CC) -shared'
+                        LDCXXSHARED='$(CXX) -shared'
+                else
+                        LDSHARED='$(CC) -b'
+                        LDCXXSHARED='$(CXX) -b'
+                fi ;;
+        Darwin/1.3*)
+                LDSHARED='$(CC) -bundle'
+                LDCXXSHARED='$(CXX) -bundle'
+                if test "$enable_framework" ; then
+                        # Link against the framework. All externals should be defined.
+                        BLDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
+                        LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
+                        LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
+                else
+                        # No framework. Ignore undefined symbols, assuming they come from Python
+                        LDSHARED="$LDSHARED -undefined suppress"
+                        LDCXXSHARED="$LDCXXSHARED -undefined suppress"
+                fi ;;
+        Darwin/1.4*|Darwin/5.*|Darwin/6.*)
+                LDSHARED='$(CC) -bundle'
+                LDCXXSHARED='$(CXX) -bundle'
+                if test "$enable_framework" ; then
+                        # Link against the framework. All externals should be defined.
+                        BLDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
+                        LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
+                        LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
+                else
+                        # No framework, use the Python app as bundle-loader
+                        BLDSHARED="$LDSHARED "'-bundle_loader $(BUILDPYTHON)'
+                        LDSHARED="$LDSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
+                        LDCXXSHARED="$LDCXXSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
+                fi ;;
+        Darwin/*)
+                # Use -undefined dynamic_lookup whenever possible (10.3 and later).
+                # This allows an extension to be used in any Python
 
-		dep_target_major=`echo ${MACOSX_DEPLOYMENT_TARGET} | \
-				sed 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\1/'`
-		dep_target_minor=`echo ${MACOSX_DEPLOYMENT_TARGET} | \
-				sed 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\2/'`
-		if test ${dep_target_major} -eq 10 && \
-		   test ${dep_target_minor} -le 2
-		then
-			# building for OS X 10.0 through 10.2
-			AC_MSG_ERROR([MACOSX_DEPLOYMENT_TARGET too old ($MACOSX_DEPLOYMENT_TARGET), only 10.3 or later is supported])
-		else
-			# building for OS X 10.3 and later
-			LDSHARED='$(CC) -bundle -undefined dynamic_lookup'
-			LDCXXSHARED='$(CXX) -bundle -undefined dynamic_lookup'
-			BLDSHARED="$LDSHARED"
-		fi
-		;;
-	iOS/*)
-		LDSHARED='$(CC) -dynamiclib -F . -framework $(PYTHONFRAMEWORK)'
-		LDCXXSHARED='$(CXX) -dynamiclib -F . -framework $(PYTHONFRAMEWORK)'
-		BLDSHARED="$LDSHARED"
-		;;
-	Emscripten*|WASI*)
-		LDSHARED='$(CC) -shared'
-		LDCXXSHARED='$(CXX) -shared';;
-	Linux*|GNU*|QNX*|VxWorks*|Haiku*)
-		LDSHARED='$(CC) -shared'
-		LDCXXSHARED='$(CXX) -shared';;
-	FreeBSD*)
-		if [[ "`$CC -dM -E - </dev/null | grep __ELF__`" != "" ]]
-		then
-			LDSHARED='$(CC) -shared'
-			LDCXXSHARED='$(CXX) -shared'
-		else
-			LDSHARED="ld -Bshareable"
-		fi;;
-	OpenBSD*)
-		if [[ "`$CC -dM -E - </dev/null | grep __ELF__`" != "" ]]
-		then
-				LDSHARED='$(CC) -shared $(CCSHARED)'
-				LDCXXSHARED='$(CXX) -shared $(CCSHARED)'
-		else
-				case `uname -r` in
-				[[01]].* | 2.[[0-7]] | 2.[[0-7]].*)
-				   LDSHARED="ld -Bshareable ${LDFLAGS}"
-				   ;;
-				*)
-				   LDSHARED='$(CC) -shared $(CCSHARED)'
-				   LDCXXSHARED='$(CXX) -shared $(CCSHARED)'
-				   ;;
-				esac
-		fi;;
-	NetBSD*|DragonFly*)
-		LDSHARED='$(CC) -shared'
-		LDCXXSHARED='$(CXX) -shared';;
-	OpenUNIX*|UnixWare*)
-		if test "$ac_cv_gcc_compat" = "yes" ; then
-			LDSHARED='$(CC) -shared'
-			LDCXXSHARED='$(CXX) -shared'
-		else
-			LDSHARED='$(CC) -G'
-			LDCXXSHARED='$(CXX) -G'
-		fi;;
-	SCO_SV*)
-		LDSHARED='$(CC) -Wl,-G,-Bexport'
-		LDCXXSHARED='$(CXX) -Wl,-G,-Bexport';;
-	WASI*)
-		AS_VAR_IF([enable_wasm_dynamic_linking], [yes], [
-			dnl not implemented yet
-		]);;
-	CYGWIN*)
-		LDSHARED="gcc -shared -Wl,--enable-auto-image-base"
-		LDCXXSHARED="g++ -shared -Wl,--enable-auto-image-base";;
-	*)	LDSHARED="ld";;
-	esac
+                dep_target_major=`echo ${MACOSX_DEPLOYMENT_TARGET} | \
+                                sed 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\1/'`
+                dep_target_minor=`echo ${MACOSX_DEPLOYMENT_TARGET} | \
+                                sed 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\2/'`
+                if test ${dep_target_major} -eq 10 && \
+                   test ${dep_target_minor} -le 2
+                then
+                        # building for OS X 10.0 through 10.2
+                        AC_MSG_ERROR([MACOSX_DEPLOYMENT_TARGET too old ($MACOSX_DEPLOYMENT_TARGET), only 10.3 or later is supported])
+                else
+                        # building for OS X 10.3 and later
+                        LDSHARED='$(CC) -bundle -undefined dynamic_lookup'
+                        LDCXXSHARED='$(CXX) -bundle -undefined dynamic_lookup'
+                        BLDSHARED="$LDSHARED"
+                fi
+                ;;
+        iOS/*)
+                LDSHARED='$(CC) -dynamiclib -F . -framework $(PYTHONFRAMEWORK)'
+                LDCXXSHARED='$(CXX) -dynamiclib -F . -framework $(PYTHONFRAMEWORK)'
+                BLDSHARED="$LDSHARED"
+                ;;
+        Emscripten*|WASI*)
+                LDSHARED='$(CC) -shared'
+                LDCXXSHARED='$(CXX) -shared';;
+        Linux*|GNU*|QNX*|VxWorks*|Haiku*)
+                LDSHARED='$(CC) -shared'
+                LDCXXSHARED='$(CXX) -shared';;
+        FreeBSD*)
+                if [[ "`$CC -dM -E - </dev/null | grep __ELF__`" != "" ]]
+                then
+                        LDSHARED='$(CC) -shared'
+                        LDCXXSHARED='$(CXX) -shared'
+                else
+                        LDSHARED="ld -Bshareable"
+                fi;;
+        OpenBSD*)
+                if [[ "`$CC -dM -E - </dev/null | grep __ELF__`" != "" ]]
+                then
+                                LDSHARED='$(CC) -shared $(CCSHARED)'
+                                LDCXXSHARED='$(CXX) -shared $(CCSHARED)'
+                else
+                                case `uname -r` in
+                                [[01]].* | 2.[[0-7]] | 2.[[0-7]].*)
+                                   LDSHARED="ld -Bshareable ${LDFLAGS}"
+                                   ;;
+                                *)
+                                   LDSHARED='$(CC) -shared $(CCSHARED)'
+                                   LDCXXSHARED='$(CXX) -shared $(CCSHARED)'
+                                   ;;
+                                esac
+                fi;;
+        NetBSD*|DragonFly*)
+                LDSHARED='$(CC) -shared'
+                LDCXXSHARED='$(CXX) -shared';;
+        OpenUNIX*|UnixWare*)
+                if test "$ac_cv_gcc_compat" = "yes" ; then
+                        LDSHARED='$(CC) -shared'
+                        LDCXXSHARED='$(CXX) -shared'
+                else
+                        LDSHARED='$(CC) -G'
+                        LDCXXSHARED='$(CXX) -G'
+                fi;;
+        SCO_SV*)
+                LDSHARED='$(CC) -Wl,-G,-Bexport'
+                LDCXXSHARED='$(CXX) -Wl,-G,-Bexport';;
+        WASI*)
+                AS_VAR_IF([enable_wasm_dynamic_linking], [yes], [
+                        dnl not implemented yet
+                ]);;
+        CYGWIN*)
+                LDSHARED="gcc -shared -Wl,--enable-auto-image-base"
+                LDCXXSHARED="g++ -shared -Wl,--enable-auto-image-base";;
+        *)	LDSHARED="ld";;
+        esac
 fi
 
 dnl Emscripten's emconfigure sets LDSHARED. Set BLDSHARED outside the
@@ -3554,37 +3554,37 @@ AC_MSG_RESULT([$BLDSHARED])
 AC_MSG_CHECKING([CCSHARED])
 if test -z "$CCSHARED"
 then
-	case $ac_sys_system/$ac_sys_release in
-	SunOS*) if test "$ac_cv_gcc_compat" = "yes";
-		then CCSHARED="-fPIC";
-		elif test `uname -p` = sparc;
-		then CCSHARED="-xcode=pic32";
-		else CCSHARED="-Kpic";
-		fi;;
-	hp*|HP*) if test "$ac_cv_gcc_compat" = "yes";
-		 then CCSHARED="-fPIC";
-		 else CCSHARED="+z";
-		 fi;;
-	Linux*|GNU*) CCSHARED="-fPIC";;
-	Emscripten*|WASI*)
-		AS_VAR_IF([enable_wasm_dynamic_linking], [yes], [
-			CCSHARED="-fPIC"
-		]);;
-	FreeBSD*|NetBSD*|OpenBSD*|DragonFly*) CCSHARED="-fPIC";;
-	Haiku*) CCSHARED="-fPIC";;
-	OpenUNIX*|UnixWare*)
-		if test "$ac_cv_gcc_compat" = "yes"
-		then CCSHARED="-fPIC"
-		else CCSHARED="-KPIC"
-		fi;;
-	SCO_SV*)
-		if test "$ac_cv_gcc_compat" = "yes"
-		then CCSHARED="-fPIC"
-		else CCSHARED="-Kpic -belf"
-		fi;;
-	VxWorks*)
-		CCSHARED="-fpic -D__SO_PICABILINUX__  -ftls-model=global-dynamic"
-	esac
+        case $ac_sys_system/$ac_sys_release in
+        SunOS*) if test "$ac_cv_gcc_compat" = "yes";
+                then CCSHARED="-fPIC";
+                elif test `uname -p` = sparc;
+                then CCSHARED="-xcode=pic32";
+                else CCSHARED="-Kpic";
+                fi;;
+        hp*|HP*) if test "$ac_cv_gcc_compat" = "yes";
+                 then CCSHARED="-fPIC";
+                 else CCSHARED="+z";
+                 fi;;
+        Linux*|GNU*) CCSHARED="-fPIC";;
+        Emscripten*|WASI*)
+                AS_VAR_IF([enable_wasm_dynamic_linking], [yes], [
+                        CCSHARED="-fPIC"
+                ]);;
+        FreeBSD*|NetBSD*|OpenBSD*|DragonFly*) CCSHARED="-fPIC";;
+        Haiku*) CCSHARED="-fPIC";;
+        OpenUNIX*|UnixWare*)
+                if test "$ac_cv_gcc_compat" = "yes"
+                then CCSHARED="-fPIC"
+                else CCSHARED="-KPIC"
+                fi;;
+        SCO_SV*)
+                if test "$ac_cv_gcc_compat" = "yes"
+                then CCSHARED="-fPIC"
+                else CCSHARED="-Kpic -belf"
+                fi;;
+        VxWorks*)
+                CCSHARED="-fpic -D__SO_PICABILINUX__  -ftls-model=global-dynamic"
+        esac
 fi
 AC_MSG_RESULT([$CCSHARED])
 # LINKFORSHARED are the flags passed to the $(CC) command that links
@@ -3592,72 +3592,72 @@ AC_MSG_RESULT([$CCSHARED])
 AC_MSG_CHECKING([LINKFORSHARED])
 if test -z "$LINKFORSHARED"
 then
-	case $ac_sys_system/$ac_sys_release in
-	AIX*)	LINKFORSHARED='-Wl,-bE:Modules/python.exp -lld';;
-	hp*|HP*)
-	    LINKFORSHARED="-Wl,-E -Wl,+s";;
+        case $ac_sys_system/$ac_sys_release in
+        AIX*)	LINKFORSHARED='-Wl,-bE:Modules/python.exp -lld';;
+        hp*|HP*)
+            LINKFORSHARED="-Wl,-E -Wl,+s";;
 #	    LINKFORSHARED="-Wl,-E -Wl,+s -Wl,+b\$(BINLIBDEST)/lib-dynload";;
-	Linux-android*) LINKFORSHARED="-pie -Xlinker -export-dynamic";;
-	Linux*|GNU*) LINKFORSHARED="-Xlinker -export-dynamic";;
-	# -u libsys_s pulls in all symbols in libsys
-	Darwin/*|iOS/*)
-		LINKFORSHARED="$extra_undefs -framework CoreFoundation"
+        Linux-android*) LINKFORSHARED="-pie -Xlinker -export-dynamic";;
+        Linux*|GNU*) LINKFORSHARED="-Xlinker -export-dynamic";;
+        # -u libsys_s pulls in all symbols in libsys
+        Darwin/*|iOS/*)
+                LINKFORSHARED="$extra_undefs -framework CoreFoundation"
 
-		# Issue #18075: the default maximum stack size (8MBytes) is too
-		# small for the default recursion limit. Increase the stack size
-		# to ensure that tests don't crash
-		stack_size="1000000"  # 16 MB
-		if test "$with_ubsan" = "yes"
-		then
-			# Undefined behavior sanitizer requires an even deeper stack
-			stack_size="4000000"  # 64 MB
-		fi
+                # Issue #18075: the default maximum stack size (8MBytes) is too
+                # small for the default recursion limit. Increase the stack size
+                # to ensure that tests don't crash
+                stack_size="1000000"  # 16 MB
+                if test "$with_ubsan" = "yes"
+                then
+                        # Undefined behavior sanitizer requires an even deeper stack
+                        stack_size="4000000"  # 64 MB
+                fi
 
-		AC_DEFINE_UNQUOTED([THREAD_STACK_SIZE],
-				[0x$stack_size],
-				[Custom thread stack size depending on chosen sanitizer runtimes.])
+                AC_DEFINE_UNQUOTED([THREAD_STACK_SIZE],
+                                [0x$stack_size],
+                                [Custom thread stack size depending on chosen sanitizer runtimes.])
 
-		if test $ac_sys_system = "Darwin"; then
-			LINKFORSHARED="-Wl,-stack_size,$stack_size $LINKFORSHARED"
+                if test $ac_sys_system = "Darwin"; then
+                        LINKFORSHARED="-Wl,-stack_size,$stack_size $LINKFORSHARED"
 
-			if test "$enable_framework"; then
-				LINKFORSHARED="$LINKFORSHARED "'$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
-			fi
-			LINKFORSHARED="$LINKFORSHARED"
-		elif test $ac_sys_system = "iOS"; then
-			LINKFORSHARED="-Wl,-stack_size,$stack_size $LINKFORSHARED "'$(PYTHONFRAMEWORKDIR)/$(PYTHONFRAMEWORK)'
-		fi
-		;;
-	OpenUNIX*|UnixWare*) LINKFORSHARED="-Wl,-Bexport";;
-	SCO_SV*) LINKFORSHARED="-Wl,-Bexport";;
-	ReliantUNIX*) LINKFORSHARED="-W1 -Blargedynsym";;
-	FreeBSD*|NetBSD*|OpenBSD*|DragonFly*)
-		if [[ "`$CC -dM -E - </dev/null | grep __ELF__`" != "" ]]
-		then
-			LINKFORSHARED="-Wl,--export-dynamic"
-		fi;;
+                        if test "$enable_framework"; then
+                                LINKFORSHARED="$LINKFORSHARED "'$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
+                        fi
+                        LINKFORSHARED="$LINKFORSHARED"
+                elif test $ac_sys_system = "iOS"; then
+                        LINKFORSHARED="-Wl,-stack_size,$stack_size $LINKFORSHARED "'$(PYTHONFRAMEWORKDIR)/$(PYTHONFRAMEWORK)'
+                fi
+                ;;
+        OpenUNIX*|UnixWare*) LINKFORSHARED="-Wl,-Bexport";;
+        SCO_SV*) LINKFORSHARED="-Wl,-Bexport";;
+        ReliantUNIX*) LINKFORSHARED="-W1 -Blargedynsym";;
+        FreeBSD*|NetBSD*|OpenBSD*|DragonFly*)
+                if [[ "`$CC -dM -E - </dev/null | grep __ELF__`" != "" ]]
+                then
+                        LINKFORSHARED="-Wl,--export-dynamic"
+                fi;;
     SunOS/5*) if test "$ac_cv_gcc_compat" = "yes"; then
-		    if $CC -Xlinker --help 2>&1 | grep export-dynamic >/dev/null
-		    then
-			LINKFORSHARED="-Xlinker --export-dynamic"
-		    fi
+                    if $CC -Xlinker --help 2>&1 | grep export-dynamic >/dev/null
+                    then
+                        LINKFORSHARED="-Xlinker --export-dynamic"
+                    fi
         fi
-		;;
-	CYGWIN*)
-		if test $enable_shared = "no"
-		then
-			LINKFORSHARED='-Wl,--out-implib=$(LDLIBRARY)'
-		fi;;
-	QNX*)
-		# -Wl,-E causes the symbols to be added to the dynamic
-		# symbol table so that they can be found when a module
-		# is loaded.  -N 2048K causes the stack size to be set
-		# to 2048 kilobytes so that the stack doesn't overflow
-		# when running test_compile.py.
-		LINKFORSHARED='-Wl,-E -N 2048K';;
-	VxWorks*)
-		LINKFORSHARED='-Wl,-export-dynamic';;
-	esac
+                ;;
+        CYGWIN*)
+                if test $enable_shared = "no"
+                then
+                        LINKFORSHARED='-Wl,--out-implib=$(LDLIBRARY)'
+                fi;;
+        QNX*)
+                # -Wl,-E causes the symbols to be added to the dynamic
+                # symbol table so that they can be found when a module
+                # is loaded.  -N 2048K causes the stack size to be set
+                # to 2048 kilobytes so that the stack doesn't overflow
+                # when running test_compile.py.
+                LINKFORSHARED='-Wl,-E -N 2048K';;
+        VxWorks*)
+                LINKFORSHARED='-Wl,-export-dynamic';;
+        esac
 fi
 AC_MSG_RESULT([$LINKFORSHARED])
 
@@ -3666,14 +3666,14 @@ AC_SUBST([CFLAGSFORSHARED])
 AC_MSG_CHECKING([CFLAGSFORSHARED])
 if test ! "$LIBRARY" = "$LDLIBRARY"
 then
-	case $ac_sys_system in
-	CYGWIN*)
-		# Cygwin needs CCSHARED when building extension DLLs
-		# but not when building the interpreter DLL.
-		CFLAGSFORSHARED='';;
-	*)
-		CFLAGSFORSHARED='$(CCSHARED)'
-	esac
+        case $ac_sys_system in
+        CYGWIN*)
+                # Cygwin needs CCSHARED when building extension DLLs
+                # but not when building the interpreter DLL.
+                CFLAGSFORSHARED='';;
+        *)
+                CFLAGSFORSHARED='$(CCSHARED)'
+        esac
 fi
 
 dnl WASM dynamic linking requires -fPIC.
@@ -3694,8 +3694,8 @@ AC_MSG_RESULT([$CFLAGSFORSHARED])
 AC_SUBST([SHLIBS])
 AC_MSG_CHECKING([SHLIBS])
 case "$ac_sys_system" in
-	*)
-		SHLIBS='$(LIBS)';;
+        *)
+                SHLIBS='$(LIBS)';;
 esac
 AC_MSG_RESULT([$SHLIBS])
 
@@ -3895,24 +3895,24 @@ AC_SEARCH_LIBS([sem_init], [pthread rt posix4])
 
 # check if we need libintl for locale functions
 AC_CHECK_LIB([intl], [textdomain],
-	[AC_DEFINE([WITH_LIBINTL], [1],
-	[Define to 1 if libintl is needed for locale functions.])
+        [AC_DEFINE([WITH_LIBINTL], [1],
+        [Define to 1 if libintl is needed for locale functions.])
         LIBS="-lintl $LIBS"])
 
 # checks for system dependent C++ extensions support
 case "$ac_sys_system" in
-	AIX*)	AC_MSG_CHECKING([for genuine AIX C++ extensions support])
-		AC_LINK_IFELSE([
-		  AC_LANG_PROGRAM([[@%:@include <load.h>]],
-				  [[loadAndInit("", 0, "")]])
-		],[
-		  AC_DEFINE([AIX_GENUINE_CPLUSPLUS], [1],
+        AIX*)	AC_MSG_CHECKING([for genuine AIX C++ extensions support])
+                AC_LINK_IFELSE([
+                  AC_LANG_PROGRAM([[@%:@include <load.h>]],
+                                  [[loadAndInit("", 0, "")]])
+                ],[
+                  AC_DEFINE([AIX_GENUINE_CPLUSPLUS], [1],
                       [Define for AIX if your compiler is a genuine IBM xlC/xlC_r
                        and you want support for AIX C++ shared extension modules.])
-		  AC_MSG_RESULT([yes])
-		],[
-		  AC_MSG_RESULT([no])
-		])
+                  AC_MSG_RESULT([yes])
+                ],[
+                  AC_MSG_RESULT([no])
+                ])
 dnl The AIX_BUILDDATE is obtained from the kernel fileset - bos.mp64
 # BUILD_GNU_TYPE + AIX_BUILDDATE are used to construct the platform_tag
 # of the AIX system used to build/package Python executable. This tag serves
@@ -3923,7 +3923,7 @@ dnl The AIX_BUILDDATE is obtained from the kernel fileset - bos.mp64
                    [BUILD_GNU_TYPE + AIX_BUILDDATE are used to construct the PEP425 tag of the build system.])
                AC_MSG_RESULT([$AIX_BUILDDATE])
                ;;
-	*) ;;
+        *) ;;
 esac
 
 # check for systems that require aligned memory access
@@ -4723,16 +4723,16 @@ if test "$posix_threads" = "yes"; then
       case  $ac_sys_system/$ac_sys_release in
       SunOS/5.6) AC_DEFINE([HAVE_PTHREAD_DESTRUCTOR], [1],
                        [Defined for Solaris 2.6 bug in pthread header.])
-		       ;;
+                       ;;
       SunOS/5.8) AC_DEFINE([HAVE_BROKEN_POSIX_SEMAPHORES], [1],
-		       [Define if the Posix semaphores do not work on your system])
-		       ;;
+                       [Define if the Posix semaphores do not work on your system])
+                       ;;
       AIX/*) AC_DEFINE([HAVE_BROKEN_POSIX_SEMAPHORES], [1],
-		       [Define if the Posix semaphores do not work on your system])
-		       ;;
+                       [Define if the Posix semaphores do not work on your system])
+                       ;;
       NetBSD/*) AC_DEFINE([HAVE_BROKEN_POSIX_SEMAPHORES], [1],
-		       [Define if the Posix semaphores do not work on your system])
-		       ;;
+                       [Define if the Posix semaphores do not work on your system])
+                       ;;
       esac
 
       AC_CACHE_CHECK([if PTHREAD_SCOPE_SYSTEM is supported], [ac_cv_pthread_system_supported],
@@ -4809,23 +4809,23 @@ AS_CASE([$ac_sys_system],
 AC_MSG_RESULT([$ipv6])
 
 if test "$ipv6" = "yes"; then
-	AC_MSG_CHECKING([if RFC2553 API is available])
-	AC_COMPILE_IFELSE([
-	  AC_LANG_PROGRAM([[#include <sys/types.h>
+        AC_MSG_CHECKING([if RFC2553 API is available])
+        AC_COMPILE_IFELSE([
+          AC_LANG_PROGRAM([[#include <sys/types.h>
 @%:@include <netinet/in.h>]],
-			  [[struct sockaddr_in6 x;
-			    x.sin6_scope_id;]])
-	],[
-	  AC_MSG_RESULT([yes])
-	  ipv6=yes
-	],[
-	  AC_MSG_RESULT([no], [IPv6 disabled])
-	  ipv6=no
-	])
+                          [[struct sockaddr_in6 x;
+                            x.sin6_scope_id;]])
+        ],[
+          AC_MSG_RESULT([yes])
+          ipv6=yes
+        ],[
+          AC_MSG_RESULT([no], [IPv6 disabled])
+          ipv6=no
+        ])
 fi
 
 if test "$ipv6" = "yes"; then
-	AC_DEFINE([ENABLE_IPV6])
+        AC_DEFINE([ENABLE_IPV6])
 fi
 ])
 
@@ -4834,78 +4834,78 @@ ipv6lib=none
 ipv6trylibc=no
 
 if test "$ipv6" = yes -a "$cross_compiling" = no; then
-	for i in inria kame linux-glibc linux-inet6 solaris toshiba v6d zeta;
-	do
-		case $i in
-		inria)
-			dnl http://www.kame.net/
-			AX_CHECK_DEFINE([netinet/in.h], [IPV6_INRIA_VERSION], [ipv6type=$i])
-			;;
-		kame)
-			dnl http://www.kame.net/
-			AX_CHECK_DEFINE([netinet/in.h], [__KAME__],
+        for i in inria kame linux-glibc linux-inet6 solaris toshiba v6d zeta;
+        do
+                case $i in
+                inria)
+                        dnl http://www.kame.net/
+                        AX_CHECK_DEFINE([netinet/in.h], [IPV6_INRIA_VERSION], [ipv6type=$i])
+                        ;;
+                kame)
+                        dnl http://www.kame.net/
+                        AX_CHECK_DEFINE([netinet/in.h], [__KAME__],
                             [ipv6type=$i
                              ipv6lib=inet6
                              ipv6libdir=/usr/local/v6/lib
                              ipv6trylibc=yes])
-			;;
-		linux-glibc)
-			dnl Advanced IPv6 support was added to glibc 2.1 in 1999.
-			AX_CHECK_DEFINE([features.h], [__GLIBC__],
+                        ;;
+                linux-glibc)
+                        dnl Advanced IPv6 support was added to glibc 2.1 in 1999.
+                        AX_CHECK_DEFINE([features.h], [__GLIBC__],
                             [ipv6type=$i
                              ipv6trylibc=yes])
-			;;
-		linux-inet6)
-			dnl http://www.v6.linux.or.jp/
-			if test -d /usr/inet6; then
-				ipv6type=$i
-				ipv6lib=inet6
-				ipv6libdir=/usr/inet6/lib
-				BASECFLAGS="-I/usr/inet6/include $BASECFLAGS"
-			fi
-			;;
-		solaris)
-			if test -f /etc/netconfig; then
+                        ;;
+                linux-inet6)
+                        dnl http://www.v6.linux.or.jp/
+                        if test -d /usr/inet6; then
+                                ipv6type=$i
+                                ipv6lib=inet6
+                                ipv6libdir=/usr/inet6/lib
+                                BASECFLAGS="-I/usr/inet6/include $BASECFLAGS"
+                        fi
+                        ;;
+                solaris)
+                        if test -f /etc/netconfig; then
                           if $GREP -q tcp6 /etc/netconfig; then
-				ipv6type=$i
-				ipv6trylibc=yes
+                                ipv6type=$i
+                                ipv6trylibc=yes
                           fi
                         fi
-			;;
-		toshiba)
-			AX_CHECK_DEFINE([sys/param.h], [_TOSHIBA_INET6],
+                        ;;
+                toshiba)
+                        AX_CHECK_DEFINE([sys/param.h], [_TOSHIBA_INET6],
                             [ipv6type=$i
                              ipv6lib=inet6
                              ipv6libdir=/usr/local/v6/lib])
-			;;
-		v6d)
-			AX_CHECK_DEFINE([/usr/local/v6/include/sys/v6config.h], [__V6D__],
+                        ;;
+                v6d)
+                        AX_CHECK_DEFINE([/usr/local/v6/include/sys/v6config.h], [__V6D__],
                             [ipv6type=$i
                              ipv6lib=v6
                              ipv6libdir=/usr/local/v6/lib
                              BASECFLAGS="-I/usr/local/v6/include $BASECFLAGS"])
-			;;
-		zeta)
-			AX_CHECK_DEFINE([sys/param.h], [_ZETA_MINAMI_INET6],
+                        ;;
+                zeta)
+                        AX_CHECK_DEFINE([sys/param.h], [_ZETA_MINAMI_INET6],
                             [ipv6type=$i
                              ipv6lib=inet6
                              ipv6libdir=/usr/local/v6/lib])
-			;;
-		esac
-		if test "$ipv6type" != "unknown"; then
-			break
-		fi
-	done
-	AC_MSG_CHECKING([ipv6 stack type])
-	AC_MSG_RESULT([$ipv6type])
+                        ;;
+                esac
+                if test "$ipv6type" != "unknown"; then
+                        break
+                fi
+        done
+        AC_MSG_CHECKING([ipv6 stack type])
+        AC_MSG_RESULT([$ipv6type])
 fi
 
 if test "$ipv6" = "yes" -a "$ipv6lib" != "none"; then
     AC_MSG_CHECKING([ipv6 library])
-	if test -d $ipv6libdir -a -f $ipv6libdir/lib$ipv6lib.a; then
-		LIBS="-L$ipv6libdir -l$ipv6lib $LIBS"
-		AC_MSG_RESULT([lib$ipv6lib])
-	else
+        if test -d $ipv6libdir -a -f $ipv6libdir/lib$ipv6lib.a; then
+                LIBS="-L$ipv6libdir -l$ipv6lib $LIBS"
+                AC_MSG_RESULT([lib$ipv6lib])
+        else
     AS_VAR_IF([ipv6trylibc], [yes], [
       AC_MSG_RESULT([libc])
     ], [
@@ -4915,7 +4915,7 @@ if test "$ipv6" = "yes" -a "$ipv6lib" != "none"; then
         ipv6 kit and compile beforehand.
       ])])
     ])
-	fi
+        fi
 fi
 
 
@@ -5167,22 +5167,22 @@ AC_SUBST([DYNLOADFILE])
 AC_MSG_CHECKING([DYNLOADFILE])
 if test -z "$DYNLOADFILE"
 then
-	case $ac_sys_system/$ac_sys_release in
-	hp*|HP*) DYNLOADFILE="dynload_hpux.o";;
-	*)
-	# use dynload_shlib.c and dlopen() if we have it; otherwise stub
-	# out any dynamic loading
-	if test "$ac_cv_func_dlopen" = yes
-	then DYNLOADFILE="dynload_shlib.o"
-	else DYNLOADFILE="dynload_stub.o"
-	fi
-	;;
-	esac
+        case $ac_sys_system/$ac_sys_release in
+        hp*|HP*) DYNLOADFILE="dynload_hpux.o";;
+        *)
+        # use dynload_shlib.c and dlopen() if we have it; otherwise stub
+        # out any dynamic loading
+        if test "$ac_cv_func_dlopen" = yes
+        then DYNLOADFILE="dynload_shlib.o"
+        else DYNLOADFILE="dynload_stub.o"
+        fi
+        ;;
+        esac
 fi
 AC_MSG_RESULT([$DYNLOADFILE])
 if test "$DYNLOADFILE" != "dynload_stub.o"
 then
-	AC_DEFINE([HAVE_DYNAMIC_LOADING], [1],
+        AC_DEFINE([HAVE_DYNAMIC_LOADING], [1],
         [Defined when any dynamic module loading is enabled.])
 fi
 
@@ -5192,9 +5192,9 @@ AC_SUBST([MACHDEP_OBJS])
 AC_MSG_CHECKING([MACHDEP_OBJS])
 if test -z "$MACHDEP_OBJS"
 then
-	MACHDEP_OBJS=$extra_machdep_objs
+        MACHDEP_OBJS=$extra_machdep_objs
 else
-	MACHDEP_OBJS="$MACHDEP_OBJS $extra_machdep_objs"
+        MACHDEP_OBJS="$MACHDEP_OBJS $extra_machdep_objs"
 fi
 if test -z "$MACHDEP_OBJS"; then
   AC_MSG_RESULT([none])
@@ -5662,7 +5662,7 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 ])
 AS_VAR_IF([ac_cv_device_macros], [yes], [
   AC_DEFINE([HAVE_DEVICE_MACROS], [1],
-	    [Define to 1 if you have the device macros.])
+            [Define to 1 if you have the device macros.])
 ])
 
 dnl no longer used, now always defined for backwards compatibility
@@ -5798,7 +5798,7 @@ then
     ])])
   ])
 else
-	AC_DEFINE([HAVE_GETADDRINFO], [1],
+        AC_DEFINE([HAVE_GETADDRINFO], [1],
       [Define if you have the getaddrinfo function.])
 fi
 
@@ -5835,7 +5835,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[@%:@include <netdb.h>]], [[struct addrinfo 
   [ac_cv_struct_addrinfo=yes],
   [ac_cv_struct_addrinfo=no]))
 if test $ac_cv_struct_addrinfo = yes; then
-	AC_DEFINE([HAVE_ADDRINFO], [1], [struct addrinfo (netdb.h)])
+        AC_DEFINE([HAVE_ADDRINFO], [1], [struct addrinfo (netdb.h)])
 fi
 
 AC_CACHE_CHECK([for sockaddr_storage], [ac_cv_struct_sockaddr_storage],
@@ -5845,7 +5845,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
   [ac_cv_struct_sockaddr_storage=yes],
   [ac_cv_struct_sockaddr_storage=no]))
 if test $ac_cv_struct_sockaddr_storage = yes; then
-	AC_DEFINE([HAVE_SOCKADDR_STORAGE], [1],
+        AC_DEFINE([HAVE_SOCKADDR_STORAGE], [1],
       [struct sockaddr_storage (sys/socket.h)])
 fi
 
@@ -5857,7 +5857,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
   [ac_cv_struct_sockaddr_alg=yes],
   [ac_cv_struct_sockaddr_alg=no]))
 if test $ac_cv_struct_sockaddr_alg = yes; then
-	AC_DEFINE([HAVE_SOCKADDR_ALG], [1],
+        AC_DEFINE([HAVE_SOCKADDR_ALG], [1],
       [struct sockaddr_alg (linux/if_alg.h)])
 fi
 
@@ -6274,7 +6274,7 @@ then
   #include <wchar.h>
   int main()
   {
-	/* Success: exit code 0 */
+        /* Success: exit code 0 */
         return ((((wchar_t) -1) < ((wchar_t) 0)) ? 0 : 1);
   }
   ]])],
@@ -6442,7 +6442,7 @@ AC_CACHE_CHECK([whether right shift extends the sign bit], [ac_cv_rshift_extends
 AC_RUN_IFELSE([AC_LANG_SOURCE([[
 int main(void)
 {
-	return (((-1)>>3 == -1) ? 0 : 1);
+        return (((-1)>>3 == -1) ? 0 : 1);
 }
 ]])],
 [ac_cv_rshift_extends_sign=yes],
@@ -6458,10 +6458,10 @@ fi
 # check for getc_unlocked and related locking functions
 AC_CACHE_CHECK([for getc_unlocked() and friends], [ac_cv_have_getc_unlocked], [
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[@%:@include <stdio.h>]], [[
-	FILE *f = fopen("/dev/null", "r");
-	flockfile(f);
-	getc_unlocked(f);
-	funlockfile(f);
+        FILE *f = fopen("/dev/null", "r");
+        flockfile(f);
+        getc_unlocked(f);
+        funlockfile(f);
 ]])],[ac_cv_have_getc_unlocked=yes],[ac_cv_have_getc_unlocked=no])])
 if test "$ac_cv_have_getc_unlocked" = yes
 then
@@ -6659,10 +6659,10 @@ AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <unistd.h>
 int main(void)
 {
-	int val1 = nice(1);
-	if (val1 != -1 && val1 == nice(2))
-		exit(0);
-	exit(1);
+        int val1 = nice(1);
+        if (val1 != -1 && val1 == nice(2))
+                exit(0);
+        exit(1);
 }
 ]])],
 [ac_cv_broken_nice=yes],
@@ -6717,57 +6717,57 @@ extern char *tzname[];
 
 int main(void)
 {
-	/* Note that we need to ensure that not only does tzset(3)
-	   do 'something' with localtime, but it works as documented
-	   in the library reference and as expected by the test suite.
-	   This includes making sure that tzname is set properly if
-	   tm->tm_zone does not exist since it is the alternative way
-	   of getting timezone info.
+        /* Note that we need to ensure that not only does tzset(3)
+           do 'something' with localtime, but it works as documented
+           in the library reference and as expected by the test suite.
+           This includes making sure that tzname is set properly if
+           tm->tm_zone does not exist since it is the alternative way
+           of getting timezone info.
 
-	   Red Hat 6.2 doesn't understand the southern hemisphere
-	   after New Year's Day.
-	*/
+           Red Hat 6.2 doesn't understand the southern hemisphere
+           after New Year's Day.
+        */
 
-	time_t groundhogday = 1044144000; /* GMT-based */
-	time_t midyear = groundhogday + (365 * 24 * 3600 / 2);
+        time_t groundhogday = 1044144000; /* GMT-based */
+        time_t midyear = groundhogday + (365 * 24 * 3600 / 2);
 
-	putenv("TZ=UTC+0");
-	tzset();
-	if (localtime(&groundhogday)->tm_hour != 0)
-	    exit(1);
+        putenv("TZ=UTC+0");
+        tzset();
+        if (localtime(&groundhogday)->tm_hour != 0)
+            exit(1);
 #if HAVE_TZNAME
-	/* For UTC, tzname[1] is sometimes "", sometimes "   " */
-	if (strcmp(tzname[0], "UTC") ||
-		(tzname[1][0] != 0 && tzname[1][0] != ' '))
-	    exit(1);
+        /* For UTC, tzname[1] is sometimes "", sometimes "   " */
+        if (strcmp(tzname[0], "UTC") ||
+                (tzname[1][0] != 0 && tzname[1][0] != ' '))
+            exit(1);
 #endif
 
-	putenv("TZ=EST+5EDT,M4.1.0,M10.5.0");
-	tzset();
-	if (localtime(&groundhogday)->tm_hour != 19)
-	    exit(1);
+        putenv("TZ=EST+5EDT,M4.1.0,M10.5.0");
+        tzset();
+        if (localtime(&groundhogday)->tm_hour != 19)
+            exit(1);
 #if HAVE_TZNAME
-	if (strcmp(tzname[0], "EST") || strcmp(tzname[1], "EDT"))
-	    exit(1);
+        if (strcmp(tzname[0], "EST") || strcmp(tzname[1], "EDT"))
+            exit(1);
 #endif
 
-	putenv("TZ=AEST-10AEDT-11,M10.5.0,M3.5.0");
-	tzset();
-	if (localtime(&groundhogday)->tm_hour != 11)
-	    exit(1);
+        putenv("TZ=AEST-10AEDT-11,M10.5.0,M3.5.0");
+        tzset();
+        if (localtime(&groundhogday)->tm_hour != 11)
+            exit(1);
 #if HAVE_TZNAME
-	if (strcmp(tzname[0], "AEST") || strcmp(tzname[1], "AEDT"))
-	    exit(1);
+        if (strcmp(tzname[0], "AEST") || strcmp(tzname[1], "AEDT"))
+            exit(1);
 #endif
 
 #if HAVE_STRUCT_TM_TM_ZONE
-	if (strcmp(localtime(&groundhogday)->tm_zone, "AEDT"))
-	    exit(1);
-	if (strcmp(localtime(&midyear)->tm_zone, "AEST"))
-	    exit(1);
+        if (strcmp(localtime(&groundhogday)->tm_zone, "AEDT"))
+            exit(1);
+        if (strcmp(localtime(&midyear)->tm_zone, "AEST"))
+            exit(1);
 #endif
 
-	exit(0);
+        exit(0);
 }
 ]])],
 [ac_cv_working_tzset=yes],
@@ -7011,7 +7011,7 @@ fi
 
 if test $ac_sys_system = Darwin
 then
-	LIBS="$LIBS -framework CoreFoundation"
+        LIBS="$LIBS -framework CoreFoundation"
 fi
 
 AC_CHECK_TYPES([socklen_t], [],
@@ -7164,6 +7164,7 @@ SRCDIRS="\
   Modules/_multiprocessing \
   Modules/_sqlite \
   Modules/_sre \
+  Modules/_string_ops \
   Modules/_testcapi \
   Modules/_testinternalcapi \
   Modules/_testlimitedcapi \
@@ -8194,13 +8195,13 @@ AC_OUTPUT
 AC_MSG_NOTICE([creating Modules/Setup.local])
 if test ! -f Modules/Setup.local
 then
-	echo "# Edit this file for local setup changes" >Modules/Setup.local
+        echo "# Edit this file for local setup changes" >Modules/Setup.local
 fi
 
 AC_MSG_NOTICE([creating Makefile])
 $SHELL $srcdir/Modules/makesetup -c $srcdir/Modules/config.c.in \
-			-s Modules \
-			Modules/Setup.local Modules/Setup.stdlib Modules/Setup.bootstrap $srcdir/Modules/Setup
+                        -s Modules \
+                        Modules/Setup.local Modules/Setup.stdlib Modules/Setup.bootstrap $srcdir/Modules/Setup
 if test $? -ne 0; then
   AC_MSG_ERROR([makesetup failed])
 fi
