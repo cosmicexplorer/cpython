@@ -10110,7 +10110,7 @@ fi
 if test "x$ac_cv_gcc_compat" = xyes
 then :
 
-    CFLAGS_NODIST="$CFLAGS_NODIST -std=c11"
+    CFLAGS_NODIST="$CFLAGS_NODIST -std=gnu2y"
 
 
 
@@ -11958,7 +11958,7 @@ fi
 # bluetooth/bluetooth.h has been known to not compile with -std=c99.
 # http://permalink.gmane.org/gmane.linux.bluez.kernel/22294
 SAVE_CFLAGS=$CFLAGS
-CFLAGS="-std=c99 $CFLAGS"
+CFLAGS="-std=gnu2y $CFLAGS"
 ac_fn_c_check_header_compile "$LINENO" "bluetooth/bluetooth.h" "ac_cv_header_bluetooth_bluetooth_h" "$ac_includes_default"
 if test "x$ac_cv_header_bluetooth_bluetooth_h" = xyes
 then :

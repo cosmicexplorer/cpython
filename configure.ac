@@ -2466,7 +2466,7 @@ then
 fi
 
 AS_VAR_IF([ac_cv_gcc_compat], [yes], [
-    CFLAGS_NODIST="$CFLAGS_NODIST -std=c11"
+    CFLAGS_NODIST="$CFLAGS_NODIST -std=gnu2y"
 
     PY_CHECK_CC_WARNING([enable], [extra], [if we can add -Wextra])
     AS_VAR_IF([ac_cv_enable_extra_warning], [yes],
@@ -3012,7 +3012,7 @@ AC_HEADER_MAJOR
 # bluetooth/bluetooth.h has been known to not compile with -std=c99.
 # http://permalink.gmane.org/gmane.linux.bluez.kernel/22294
 SAVE_CFLAGS=$CFLAGS
-CFLAGS="-std=c99 $CFLAGS"
+CFLAGS="-std=gnu2y $CFLAGS"
 AC_CHECK_HEADERS([bluetooth/bluetooth.h])
 CFLAGS=$SAVE_CFLAGS
 

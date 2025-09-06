@@ -167,7 +167,7 @@ class _Target(typing.Generic[_S, _R]):
             "-fno-plt",
             # Don't call stack-smashing canaries that we can't find or patch:
             "-fno-stack-protector",
-            "-std=c11",
+            "-std=gnu2y",
             "-o",
             f"{s}",
             f"{c}",

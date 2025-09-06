@@ -303,7 +303,7 @@ Include/internal/pycore_crossinterp_data_registry.h	Py_CORE_CROSSINTERP_DATA_REG
 # -g
 # -Og
 # -Wall
-# -std=c99
+# -std=gnu2y
 # -Wextra
 # -Wno-unused-result -Wno-unused-parameter
 # -Wno-missing-field-initializers
