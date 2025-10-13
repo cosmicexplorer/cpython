@@ -49,8 +49,16 @@ help:
 	@echo "  dist       to create a \"dist\" directory with archived docs for download"
 	@echo "  check      to run a check for frequent markup errors"
 
-.PHONY: build
-build:
+# _IS_SOURCE_RELEASE := $(wildcard ../Misc/NEWS)
+
+../Misc/NEWS:
+
+../Misc/NEWS: build/NEWS
+	@echo "Using existing Misc/NEWS file"
+	cp -v $< $@
+
+.PHONY: build ../Misc/NEWS
+build: ../Misc/NEWS
 	-mkdir -p build
 # Look first for a Misc/NEWS file (building from a source release tarball
 # or old repo) and use that, otherwise look for a Misc/NEWS.d directory
@@ -85,14 +93,14 @@ html: build
 htmlhelp: BUILDER = htmlhelp
 htmlhelp: build
 	@echo "Build finished; now you can run HTML Help Workshop with the" \
-	      "build/htmlhelp/pydoc.hhp project file."
+				"build/htmlhelp/pydoc.hhp project file."
 
 .PHONY: latex
 latex: BUILDER = latex
 latex: build
 	@echo "Build finished; the LaTeX files are in build/latex."
 	@echo "Run \`make all-pdf' or \`make all-ps' in that directory to" \
-	      "run these through (pdf)latex."
+				"run these through (pdf)latex."
 
 .PHONY: text
 text: BUILDER = text
@@ -120,7 +128,7 @@ linkcheck: BUILDER = linkcheck
 linkcheck:
 	@$(MAKE) build BUILDER=$(BUILDER) || { \
 	echo "Link check complete; look for any errors in the above output" \
-	     "or in build/$(BUILDER)/output.txt"; \
+			 "or in build/$(BUILDER)/output.txt"; \
 	false; }
 
 .PHONY: coverage
@@ -133,14 +141,14 @@ doctest: BUILDER = doctest
 doctest:
 	@$(MAKE) build BUILDER=$(BUILDER) || { \
 	echo "Testing of doctests in the sources finished, look at the" \
-	     "results in build/doctest/output.txt"; \
+			 "results in build/doctest/output.txt"; \
 	false; }
 
 .PHONY: pydoc-topics
 pydoc-topics: BUILDER = pydoc-topics
 pydoc-topics: build
 	@echo "Building finished; now run this:" \
-	      "cp build/pydoc-topics/topics.py ../Lib/pydoc_data/topics.py"
+				"cp build/pydoc-topics/topics.py ../Lib/pydoc_data/topics.py"
 
 .PHONY: gettext
 gettext: BUILDER = gettext
@@ -164,8 +172,13 @@ clean: clean-venv
 clean-venv:
 	rm -rf $(VENVDIR)
 
-.PHONY: venv
-venv:
+# https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
+$(VENVDIR):
+
+
+.PHONY: venv $(VENVDIR)
+
+venv: $(VENVDIR)
 	@if [ -d $(VENVDIR) ] ; then \
 		echo "venv already exists."; \
 		echo "To recreate it, remove it first with \`make clean-venv'."; \

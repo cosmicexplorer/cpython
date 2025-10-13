@@ -1401,8 +1401,8 @@ are always available.  They are listed here in alphabetical order.
    In binary mode:
    * < 0 selects the default buffering scheme for bytes I/O.
    * 0 disables buffering entirely.
-   * 1 selects the default buffering scheme and prints a warning. This is
-     a relic from Python 2, when line buffering was always supported.
+   * 1 selects the default buffering scheme and prints a warning.
+     This is a relic from Python 2, when line buffering was always supported.
    * > 1 creates a buffer of the given size and uses it to group together read
      and write calls to the underlying I/O handle.
 

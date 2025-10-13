@@ -27,6 +27,13 @@ m4_ifdef(
     [AC_MSG_ERROR([Please install pkgconf's m4 macro package and re-run autoreconf])]
 )dnl
 
+dnl We need grep and sed earlier than other programs.
+AC_PROG_GREP
+AC_PROG_EGREP
+AC_PROG_FGREP
+AC_PROG_SED
+AC_PROG_AWK
+
 dnl Helpers for saving and restoring environment variables:
 dnl - _SAVE_VAR([VAR])         Helper for SAVE_ENV; stores VAR as save_VAR
 dnl - _RESTORE_VAR([VAR])      Helper for RESTORE_ENV; restores VAR from save_VAR
@@ -71,6 +78,72 @@ AC_DEFUN([PY_CHECK_FUNC],
     [AC_DEFINE([py_define], [1], [Define if you have the '$1' function.])])
   AS_VAR_POPDEF([py_var])
   AS_VAR_POPDEF([py_define])
+])
+
+
+dnl TRACK_DOWN_A_PYTHON_AND_ASK_IT_TO_INTROSPECT(EXE-NAME FULL-PY-PATH-VARNAME PY-MAJ-MIN-VERSION)
+AC_DEFUN([TRACK_DOWN_A_PYTHON_AND_ASK_IT_TO_INTROSPECT], [
+  AS_IF([command -v "$1" >conftest.out],[
+    _full_path_to_python=`cat conftest.out`
+    _build_python_ver=`"$full_path_to_python" "${top_srcdir}/Tools/build/build_python_introspection.py"`
+    AS_VAR_COPY([$2],[_full_path_to_python])
+    AS_VAR_COPY([$3],[_build_python_ver])
+  ],[
+    AC_MSG_FAILURE([Could not locate python executable name "$1"])
+  ])
+  rm -f conftest.out
+])
+
+dnl This number was picked arbitrarily, feel free to pick a better one.
+AC_SUBST(PIP_MINIMUM_VERSION, [20])
+dnl GET_PIP(PIP-EXE PY-EXE PIP-SCRIPT-VARNAME VERSION-VARNAME)
+AC_DEFUN([GET_PIP],[
+  AC_MSG_CHECKING([if a sufficient degree of pip is available for our purposes])
+  AS_IF(["$1" --version >conftest.out 2>conf2.out],[
+    dnl We have pip! But is it enough?
+    _ver=`$AWK '{print $2}' <conftest.out`
+    AS_VERSION_COMPARE([$_ver],[$PIP_MINIMUM_VERSION],[
+      dnl We have less! :c Rather than contacting the network without consulting the user, we'll
+      dnl stick to the methodology of PEP 453 and give the user all the tools they need to fix it.
+      dnl https://peps.python.org/pep-0453/#automatically-contacting-pypi-when-bootstrapping-pip 
+      AC_MSG_FAILURE([The version of pip available in the python environment from "$1" (pip "$_ver")
+                      is lower than the minimum we require for certain parts of CPython 
+                      (at least pip "$PIP_MINIMUM_VERSION"). You should be able to upgrade pip by
+                      running 'pip install --upgrade pip'.])
+      dnl We should really have a good rationale for bumping versions. I think pip was able to unify
+      dnl on PEP 440 recently, but that doesn't break compatibility with older pips.
+    ], [
+      dnl This is the exactly equal case. Maybe we could print a warning for this, but pip doesn't
+      dnl really do a lot of breaking changes and such a warning would be a distraction at best.
+    ], [
+      dnl This is the greater case, and should be the most common.
+    ])
+    AC_MSG_RESULT([pip >= "$PIP_MINIMUM_VERSION" identified in "$1"!])
+    AS_VAR_COPY([$2],[$1])
+    AS_VAR_COPY([$3],[_ver])
+  ], [
+    dnl Now we have some detective work to do. Is it the lack of pip, or something else? We can
+    dnl solve one of those problems securely and robustly with ensurepip.
+    dnl The reason we invoked with -m is because we can rely on the python interpreter's consistent
+    dnl error messaging in this case, as opposed to worrying about CLI parsing in general.
+    AS_IF(["$FGREP" 'No module named pip' <conf2.out >/dev/null],[
+      dnl This looks like a job for ensurepip!!
+      AC_MSG_RESULT([pip is unavailable by default in your environment])
+      dnl Before we modify the user's environment, let's see what version of pip they have.
+      AC_MSG_CHECKING([running ensurepip])
+      "$2" -m ensurepip
+    ])
+  ])
+  rm -f conftest.out conf2.out
+])
+
+dnl ENSURE_PYTHON_EXE_MODULE_BY_VERSION(PYTHON-FOR-BUILD MODULE-NAME VERSION-REQUIREMENT)
+AC_DEFUN([ENSURE_PYTHON_EXE_MODULE_BY_VERSION], [
+  AS_IF(["$1" "$(top_srcdir)/Tools/build/ensure_version_module.py" "$2" "$3" >conftest.out], [
+    _tmp_ret=`cat conftest.out`
+    AS_VAR_COPY([$4],[_tmp_ret])
+  ], [$5])
+  rm -f conftest.out
 ])
 
 dnl PY_CHECK_LIB(LIBRARY, FUNCTION, [ACTION-IF-FOUND], [ACTION-IF-NOT-FOUND], [OTHER-LIBRARIES])
@@ -147,39 +220,62 @@ rm -f pybuilddir.txt
 
 AC_ARG_WITH([build-python],
   [AS_HELP_STRING([--with-build-python=python]PYTHON_VERSION,
-                  [path to build python binary for cross compiling (default: _bootstrap_python or python]PYTHON_VERSION[)])],
+                    [path to build python binary for cross compiling (default: _bootstrap_python or python]PYTHON_VERSION[)])],
   [
-    AC_MSG_CHECKING([for --with-build-python])
+    dnl This is if we have been given a value.
+    AC_MSG_CHECKING([if the value provided to --with-build-python matches the version of python we
+                     are building])
 
     AS_VAR_IF([with_build_python], [yes], [with_build_python=python$PACKAGE_VERSION])
     AS_VAR_IF([with_build_python], [no], [AC_MSG_ERROR([invalid --with-build-python option: expected path or "yes", not "no"])])
 
-    if ! $(command -v "$with_build_python" >/dev/null 2>&1); then
-      AC_MSG_ERROR([invalid or missing build python binary "$with_build_python"])
-    fi
-    build_python_ver=$($with_build_python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-    if test "$build_python_ver" != "$PACKAGE_VERSION"; then
-      AC_MSG_ERROR(["$with_build_python" has incompatible version $build_python_ver (expected: $PACKAGE_VERSION)])
-    fi
+    TRACK_DOWN_A_PYTHON_AND_ASK_IT_TO_INTROSPECT([$with_build_python],
+                                                 [full_path_to_python],
+                                                 [build_python_ver])
+    dnl TODO: is there a reason we're not using the output of `command -v`? If the user's PATH
+    dnl       changes in between commands, things will break. Have users reported max path length
+    dnl       issues with their OS before?
+    AS_VAR_IF([build_python_ver],[$PACKAGE_VERSION],[],[
+      AC_MSG_ERROR([when providing a specific value to the --with-build-python flag,
+                    we require it to be the same version as the cpython being built (expected: $PACKAGE_VERSION)])
+    ])
+
     dnl Build Python interpreter is used for regeneration and freezing.
+    dnl TODO: where? why is this one variable cached and not the other PYTHON_FOR_* vars?
     ac_cv_prog_PYTHON_FOR_REGEN=$with_build_python
-    PYTHON_FOR_FREEZE="$with_build_python"
+    PYTHON_FOR_FREEZE=$with_build_python
+    dnl TODO: This set of makefile instructions that calls $(shell) in a string literal while doing
+    dnl       something unrelated around python version checking seems possible to improve, but I'm
+    dnl       not familiar with what constraints led to produce it in the first place. Is there
+    dnl       a reason that variables like $(abs_builddir) and $(MACHDEP) can't be expanded here and
+    dnl       need to wait until the makefile expands them?
     PYTHON_FOR_BUILD='_PYTHON_PROJECT_BASE=$(abs_builddir) _PYTHON_HOST_PLATFORM=$(_PYTHON_HOST_PLATFORM) PYTHONPATH=$(srcdir)/Lib _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata_$(ABIFLAGS)_$(MACHDEP)_$(MULTIARCH) _PYTHON_SYSCONFIGDATA_PATH=$(shell test -f pybuilddir.txt && echo $(abs_builddir)/`cat pybuilddir.txt`) '$with_build_python
-    AC_MSG_RESULT([$with_build_python])
+
+    ac_cv_prog_PYTHON_FOR_BUILD=$full_path_to_python
+    ac_cv_compat_PYTHON_FOR_BUILD_VERSION=$build_python_ver
+    AC_MSG_RESULT([$with_build_python (version $build_python_ver)])
   ], [
     AS_VAR_IF([cross_compiling], [yes],
-      [AC_MSG_ERROR([Cross compiling requires --with-build-python])]
+      dnl TODO: why? what is the build python used for? what ABI requirements does it have?
+      [AC_MSG_ERROR([Cross compiling requires providing the path to a specific python binary using --with-build-python])]
     )
     PYTHON_FOR_BUILD='./$(BUILDPYTHON) -E'
     PYTHON_FOR_FREEZE="./_bootstrap_python"
+
+    dnl     Is it reasonable to use the same cpython for docs generation as for the other things we use
+    dnl     it for? Or should we have a separate docs python?
+    AC_MSG_CHECKING([for a local python to help us with documentation])
+
+    TRACK_DOWN_A_PYTHON_AND_ASK_IT_TO_INTROSPECT([python3],
+                                                 [ac_cv_prog_PYTHON_FOR_BUILD],
+                                                 [ac_cv_compat_PYTHON_FOR_BUILD_VERSION])
+
+    AC_MSG_RESULT([$ac_cv_prog_PYTHON_FOR_BUILD (version $ac_cv_compat_PYTHON_FOR_BUILD_VERSION)])
   ]
 )
 AC_SUBST([PYTHON_FOR_BUILD])
 
 AC_MSG_CHECKING([for Python interpreter freezing])
-AC_MSG_RESULT([$PYTHON_FOR_FREEZE])
-AC_SUBST([PYTHON_FOR_FREEZE])
-
 AS_VAR_IF([cross_compiling], [yes],
   [
     dnl external build Python, freezing depends on Programs/_freeze_module.py
@@ -198,6 +294,8 @@ AS_VAR_IF([cross_compiling], [yes],
     PYTHON_FOR_BUILD_DEPS='$(BUILDPYTHON)'
   ]
 )
+AC_MSG_RESULT([$PYTHON_FOR_FREEZE])
+AC_SUBST([PYTHON_FOR_FREEZE])
 AC_SUBST([FREEZE_MODULE_BOOTSTRAP])
 AC_SUBST([FREEZE_MODULE_BOOTSTRAP_DEPS])
 AC_SUBST([FREEZE_MODULE])
@@ -216,13 +314,37 @@ else
   AC_MSG_RESULT([missing])
 fi
 
+dnl Now look for *another* python executable (or maybe the same one), because this one will be safer
+dnl to cache and will mostly be used for building docs.
+AC_ARG_VAR([DOC_PY],[Filesystem path or executable name to a python version to use for documentation
+                     generation. This has separate dependency sets from other pythons used in the build.])
+
+AC_ARG_WITH([doc-py],
+  [AS_HELP_STRING([--with-doc-py=python],
+                  [Oath to a specific python executable (or an executable name to look up in PATH)
+                   used for documentation generation. Docs have separate dependency sets from other
+                   pythons employed in the build.])],
+  [
+    AC_MSG_CHECKING([if the value provided to --with-doc-py has a recent pip])
+  ], [
+    
+  ]
+)
+
+
+AC_CACHE_CHECK([for DOC_PY],[ac_cv_prog_PYTHON_FOR_DOCS], [
+
+
+
+])
+
 dnl Ensure that if prefix is specified, it does not end in a slash. If
 dnl it does, we get path names containing '//' which is both ugly and
 dnl can cause trouble.
 
 dnl Last slash shouldn't be stripped if prefix=/
 if test "$prefix" != "/"; then
-    prefix=`echo "$prefix" | sed -e 's/\/$//g'`
+    prefix=`echo "$prefix" | "$SED" -e 's/\/$//g'`
 fi
 
 dnl This is for stuff that absolutely must end up in pyconfig.h.
@@ -242,7 +364,7 @@ AH_BOTTOM([
 
 # We don't use PACKAGE_ variables, and they cause conflicts
 # with other autoconf-based packages that include Python.h
-grep -v 'define PACKAGE_' <confdefs.h >confdefs.h.new
+"$GREP" -v 'define PACKAGE_' <confdefs.h >confdefs.h.new
 rm confdefs.h
 mv confdefs.h.new confdefs.h
 
@@ -360,7 +482,7 @@ then
     ac_md_system=`echo $ac_sys_system |
 			tr -d '[/ ]' | tr '[[A-Z]]' '[[a-z]]'`
     ac_md_release=`echo $ac_sys_release |
-			tr -d '[/ ]' | sed 's/^[[A-Z]]\.//' | sed 's/\..*//'`
+			tr -d '[/ ]' | "$SED" 's/^[[A-Z]]\.//' | "$SED" 's/\..*//'`
     MACHDEP="$ac_md_system$ac_md_release"
 
     case $MACHDEP in
@@ -376,7 +498,7 @@ then
     if test "$ac_sys_system" = "SunOS"; then
 	# For Solaris, there isn't an OS version specific macro defined
 	# in most compilers, so we define one here.
-	SUNOS_VERSION=`echo $ac_sys_release | sed -e 's!\.\([0-9]\)$!.0\1!g' | tr -d '.'`
+	SUNOS_VERSION=`echo $ac_sys_release | "$SED" -e 's!\.\([0-9]\)$!.0\1!g' | tr -d '.'`
 	AC_DEFINE_UNQUOTED([Py_SUNOS_VERSION], [$SUNOS_VERSION],
 	                   [The version of SunOS/Solaris as reported by `uname -r' without the dot.])
     fi
@@ -460,7 +582,7 @@ AC_ARG_ENABLE([universalsdk],
 		# Locate the best usable SDK, see Mac/README for more
 		# information
 		enableval="`/usr/bin/xcodebuild -version -sdk macosx Path 2>/dev/null`"
-		if ! ( echo $enableval | grep -E '\.sdk' 1>/dev/null )
+		if ! ( echo $enableval | "$EGREP" '\.sdk' 1>/dev/null )
 		then
 			enableval=/Developer/SDKs/MacOSX10.4u.sdk
 			if test ! -d "${enableval}"
@@ -506,7 +628,7 @@ if test "`uname -s`" = "Darwin"
 then
 	if test -n "${UNIVERSALSDK}"
 	then
-		if test -z "`/usr/bin/file -L "${UNIVERSALSDK}/usr/lib/libSystem.dylib" | grep ppc`"
+		if test -z "`/usr/bin/file -L "${UNIVERSALSDK}/usr/lib/libSystem.dylib" | "$GREP" ppc`"
 		then
 			UNIVERSAL_ARCHS="intel"
 		fi
@@ -1030,7 +1152,7 @@ then
 
 		if test -n "$found_gcc" -a -n "$found_clang"
 		then
-			if test -n "`"$found_gcc" --version | grep llvm-gcc`"
+			if test -n "`"$found_gcc" --version | "$FGREP" llvm-gcc`"
 			then
 				AC_MSG_NOTICE([Detected llvm-gcc, falling back to clang])
 				CC="$found_clang"
@@ -1060,9 +1182,6 @@ then
 fi
 AC_PROG_CC
 AC_PROG_CPP
-AC_PROG_GREP
-AC_PROG_SED
-AC_PROG_EGREP
 
 dnl GNU Autoconf recommends the use of expr instead of basename.
 AS_VAR_SET([CC_BASENAME], [$(expr "//$CC" : '.*/\(.*\)')])
@@ -1091,7 +1210,7 @@ cat > conftest.c <<EOF
 EOF
 
 if $CPP $CPPFLAGS conftest.c >conftest.out 2>/dev/null; then
-  ac_cv_cc_name=`grep -v '^#' conftest.out | grep -v '^ *$' | tr -d ' 	'`
+  ac_cv_cc_name=`"$GREP" -v '^#' conftest.out | "$GREP" -v '^ *$' | tr -d ' 	'`
   AS_VAR_IF([CC_BASENAME], [mpicc], [ac_cv_cc_name=mpicc])
 else
   ac_cv_cc_name="unknown"
@@ -1152,7 +1271,7 @@ fi
 
 AC_MSG_CHECKING([for the platform triplet based on compiler characteristics])
 if $CPP $CPPFLAGS $srcdir/Misc/platform_triplet.c >conftest.out 2>/dev/null; then
-  PLATFORM_TRIPLET=`grep '^PLATFORM_TRIPLET=' conftest.out | tr -d ' 	'`
+  PLATFORM_TRIPLET=`"$GREP" '^PLATFORM_TRIPLET=' conftest.out | tr -d ' 	'`
   PLATFORM_TRIPLET="${PLATFORM_TRIPLET@%:@PLATFORM_TRIPLET=}"
   AC_MSG_RESULT([$PLATFORM_TRIPLET])
 else
@@ -1266,8 +1385,8 @@ arm_arch = __ARM_ARCH
 EOF
 
 if $CPP $CPPFLAGS conftest.c >conftest.out 2>/dev/null; then
-  ANDROID_API_LEVEL=`sed -n -e '/__ANDROID_API__/d' -e 's/^android_api = //p' conftest.out`
-  _arm_arch=`sed -n -e '/__ARM_ARCH/d' -e 's/^arm_arch = //p' conftest.out`
+  ANDROID_API_LEVEL=`"$SED" -n -e '/__ANDROID_API__/d' -e 's/^android_api = //p' conftest.out`
+  _arm_arch=`"$SED" -n -e '/__ARM_ARCH/d' -e 's/^arm_arch = //p' conftest.out`
   AC_MSG_RESULT([$ANDROID_API_LEVEL])
   if test -z "$ANDROID_API_LEVEL"; then
     AC_MSG_ERROR([Fatal: you must define __ANDROID_API__])
@@ -1335,7 +1454,7 @@ AC_MSG_RESULT([$enable_wasm_pthreads])
 
 AC_MSG_CHECKING([for --with-suffix])
 AC_ARG_WITH([suffix],
-            [AS_HELP_STRING([--with-suffix=SUFFIX], [set executable suffix to SUFFIX (default is empty, yes is mapped to '.exe')])],
+            [AS_HELP_STRING([--with-suffix=SUFFIX], [set  executable suffix to SUFFIX (default is empty, yes is mapped to '.exe')])],
 [
 	AS_CASE([$with_suffix],
     [no], [EXEEXT=],
@@ -2539,7 +2658,7 @@ AS_VAR_IF([ac_cv_gcc_compat], [yes], [
     # if so, only then enable the warning.
     if test $ac_cv_enable_unreachable_code_warning = yes && \
         test "$Py_DEBUG" != "true" && \
-        test -z "`$CC --version 2>/dev/null | grep 'Free Software Foundation'`"
+        test -z "`$CC --version 2>/dev/null | "$GREP" 'Free Software Foundation'`"
     then
       BASECFLAGS="$BASECFLAGS -Wunreachable-code"
     else
@@ -2703,9 +2822,9 @@ AS_VAR_IF([ac_cv_gcc_compat], [yes], [
 
         AC_MSG_CHECKING([which MACOSX_DEPLOYMENT_TARGET to use])
         cur_target_major=`sw_vers -productVersion | \
-                sed 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\1/'`
+                "$SED" 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\1/'`
         cur_target_minor=`sw_vers -productVersion | \
-                sed 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\2/'`
+                "$SED" 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\2/'`
         cur_target="${cur_target_major}.${cur_target_minor}"
         if test ${cur_target_major} -eq 10 && \
            test ${cur_target_minor} -ge 3 && \
@@ -3461,9 +3580,9 @@ then
 		# This allows an extension to be used in any Python
 
 		dep_target_major=`echo ${MACOSX_DEPLOYMENT_TARGET} | \
-				sed 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\1/'`
+				"$SED" 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\1/'`
 		dep_target_minor=`echo ${MACOSX_DEPLOYMENT_TARGET} | \
-				sed 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\2/'`
+				"$SED" 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\2/'`
 		if test ${dep_target_major} -eq 10 && \
 		   test ${dep_target_minor} -le 2
 		then
@@ -3488,7 +3607,7 @@ then
 		LDSHARED='$(CC) -shared'
 		LDCXXSHARED='$(CXX) -shared';;
 	FreeBSD*)
-		if [[ "`$CC -dM -E - </dev/null | grep __ELF__`" != "" ]]
+		if [[ "`$CC -dM -E - </dev/null | "$GREP" __ELF__`" != "" ]]
 		then
 			LDSHARED='$(CC) -shared'
 			LDCXXSHARED='$(CXX) -shared'
@@ -3496,7 +3615,7 @@ then
 			LDSHARED="ld -Bshareable"
 		fi;;
 	OpenBSD*)
-		if [[ "`$CC -dM -E - </dev/null | grep __ELF__`" != "" ]]
+		if [[ "`$CC -dM -E - </dev/null | "$GREP" __ELF__`" != "" ]]
 		then
 				LDSHARED='$(CC) -shared $(CCSHARED)'
 				LDCXXSHARED='$(CXX) -shared $(CCSHARED)'
@@ -3632,12 +3751,12 @@ then
 	SCO_SV*) LINKFORSHARED="-Wl,-Bexport";;
 	ReliantUNIX*) LINKFORSHARED="-W1 -Blargedynsym";;
 	FreeBSD*|NetBSD*|OpenBSD*|DragonFly*)
-		if [[ "`$CC -dM -E - </dev/null | grep __ELF__`" != "" ]]
+		if [[ "`$CC -dM -E - </dev/null | "$GREP" __ELF__`" != "" ]]
 		then
 			LINKFORSHARED="-Wl,--export-dynamic"
 		fi;;
     SunOS/5*) if test "$ac_cv_gcc_compat" = "yes"; then
-		    if $CC -Xlinker --help 2>&1 | grep export-dynamic >/dev/null
+		    if $CC -Xlinker --help 2>&1 | "$GREP" export-dynamic >/dev/null
 		    then
 			LINKFORSHARED="-Xlinker --export-dynamic"
 		    fi
@@ -3918,7 +4037,7 @@ dnl The AIX_BUILDDATE is obtained from the kernel fileset - bos.mp64
 # of the AIX system used to build/package Python executable. This tag serves
 # as a baseline for bdist module packages
                AC_MSG_CHECKING([for the system builddate])
-               AIX_BUILDDATE=$(lslpp -Lcq bos.mp64 | awk -F:  '{ print $NF }')
+               AIX_BUILDDATE=$(lslpp -Lcq bos.mp64 | "$AWK" -F:  '{ print $NF }')
                AC_DEFINE_UNQUOTED([AIX_BUILDDATE], [$AIX_BUILDDATE],
                    [BUILD_GNU_TYPE + AIX_BUILDDATE are used to construct the PEP425 tag of the build system.])
                AC_MSG_RESULT([$AIX_BUILDDATE])
@@ -3998,7 +4117,7 @@ validate_tzpath() {
 
     # Bad paths are those that don't start with /
     dnl quadrigraphs "@<:@" and "@:>@" produce "[" and "]" in the output
-    if ( echo $1 | grep '\(^\|:\)\(@<:@^/@:>@\|$\)' > /dev/null); then
+    if ( echo $1 | "$GREP" '\(^\|:\)\(@<:@^/@:>@\|$\)' > /dev/null); then
         AC_MSG_ERROR([--with-tzpath must contain only absolute paths, not $1])
         return 1;
     fi
@@ -6300,7 +6419,7 @@ fi
 case $ac_sys_system/$ac_sys_release in
 SunOS/*)
   if test -f /etc/os-release; then
-    OS_NAME=$(awk -F= '/^NAME=/ {print substr($2,2,length($2)-2)}' /etc/os-release)
+    OS_NAME=$("$AWK" -F= '/^NAME=/ {print substr($2,2,length($2)-2)}' /etc/os-release)
     if test "x$OS_NAME" = "xOracle Solaris"; then
       # bpo-43667: In Oracle Solaris, the internal form of wchar_t in
       # non-Unicode locales is not Unicode and hence cannot be used directly.
@@ -6540,7 +6659,7 @@ AS_VAR_IF([with_readline], [edit], [
 ])
 
 dnl pyconfig.h defines _XOPEN_SOURCE=700
-READLINE_CFLAGS=$(echo $READLINE_CFLAGS | sed 's/-D_XOPEN_SOURCE=600//g')
+READLINE_CFLAGS=$(echo $READLINE_CFLAGS | "$SED" 's/-D_XOPEN_SOURCE=600//g')
 
 AC_MSG_CHECKING([how to link readline])
 AS_VAR_IF([with_readline], [no], [
@@ -6886,7 +7005,7 @@ AC_DEFUN([_CURSES_INCLUDES],dnl
 AS_IF([test "have_curses" != "no"], [
 dnl remove _XOPEN_SOURCE macro from curses cflags. pyconfig.h sets
 dnl the macro to 700.
-CURSES_CFLAGS=$(echo $CURSES_CFLAGS | sed 's/-D_XOPEN_SOURCE=600//g')
+CURSES_CFLAGS=$(echo $CURSES_CFLAGS | "$SED" 's/-D_XOPEN_SOURCE=600//g')
 
 AS_VAR_IF([ac_sys_system], [Darwin], [
   dnl On macOS, there is no separate /usr/lib/libncursesw nor libpanelw.
@@ -6901,7 +7020,7 @@ AS_VAR_IF([ac_sys_system], [Darwin], [
 ])
 
 dnl pyconfig.h defines _XOPEN_SOURCE=700
-PANEL_CFLAGS=$(echo $PANEL_CFLAGS | sed 's/-D_XOPEN_SOURCE=600//g')
+PANEL_CFLAGS=$(echo $PANEL_CFLAGS | "$SED" 's/-D_XOPEN_SOURCE=600//g')
 
 # On Solaris, term.h requires curses.h
 AC_CHECK_HEADERS([term.h], [], [], _CURSES_INCLUDES)
@@ -8201,10 +8320,34 @@ esac
 
 AC_SUBST([JIT_STENCILS_H])
 
+
+dnl https://peps.python.org/pep-0453/
+dnl This specific problem can be partially alleviated by strongly promoting pip as the default dnl
+dnl installer and recommending that other projects reference pip’s own bootstrapping instructions
+dnl rather than duplicating them:
+dnl TODO: why is PEP 453 sending users to an HTTP-only url???? http://www.pip-installer.org/en/latest/installing.html
+dnl https://pip.pypa.io/en/latest/installation/
+AC_CACHE_CHECK([for the pip installation],[ac_cv_prog_PIP_VERSION],[
+_PIP_MINIMUM_SUPPORT=21
+ENSURE_PYTHON_EXE_MODULE_BY_VERSION([$ac_cv_prog_PYTHON_FOR_BUILD],
+                                    [pip],[$_PIP_MINIMUM_SUPPORT],[ac_cv_prog_PIP_VERSION],[
+  AC_MSG_CHECKING([pip was not located! running ensurepip with "$ac_cv_prog_PYTHON_FOR_BUILD"])
+
+  AS_IF(["$ac_cv_prog_PYTHON_FOR_BUILD" -m ensurepip],[
+    ENSURE_PYTHON_EXE_MODULE_BY_VERSION([$ac_cv_prog_PYTHON_FOR_BUILD],
+                                        [pip],[$_PIP_MINIMUM_SUPPORT],[ac_cv_prog_PIP_VERSION],[
+      AC_MSG_FAILURE([very mysterious--couldn't find pip after bootstrapping it!
+                      please file a bug report!])])
+  ],[
+    AC_MSG_FAILURE([bootstrapping ensurepip failed! please file a bug report!])
+  ])
+
+  AC_MSG_RESULT([successfully bootstrapped pip "$ac_cv_prog_PIP_VERSION"])
+])])
+
+
 # substitute multiline block, must come after last PY_STDLIB_MOD()
 AC_SUBST([MODULE_BLOCK])
-
-# generate output files
 AC_CONFIG_FILES(m4_normalize([
   Makefile.pre
   Misc/python.pc
@@ -8233,7 +8376,12 @@ if test $? -ne 0; then
   AC_MSG_ERROR([makesetup failed])
 fi
 
-mv config.c Modules
+# TODO: why can't this be there in the first place?
+mv -v config.c Modules
+
+AC_CONFIG_FILES(m4_normalize([
+  Doc/Makefile.pre
+]))
 
 if test -z "$PKG_CONFIG"; then
   AC_MSG_WARN([pkg-config is missing. Some dependencies may not be detected correctly.])
@@ -8243,7 +8391,7 @@ if test "$Py_OPT" = 'false' -a "$Py_DEBUG" != 'true'; then
   AC_MSG_NOTICE([
 
 If you want a release build with all stable optimizations active (PGO, etc),
-please run ./configure --enable-optimizations
+please run [${srcdir}/configure] --enable-optimizations
 ])
 fi
 
