@@ -40,7 +40,7 @@ class _string_ops.STRINGOPS_ByteMatcher "SingleByteMatcher *" "get_string_ops_mo
 
 static PyObject *byte_matcher_repr(PyObject *self) {
   SingleByteMatcher *obj = _SingleByteMatcher_CAST(self);
-  return PyUnicode_FromFormat("%c", obj->to_match);
+  return PyUnicode_FromFormat("_string_ops.single_byte_matcher(%d)", obj->to_match);
 }
 
 static Py_hash_t byte_matcher_hash(PyObject *op) {
@@ -125,24 +125,30 @@ _string_ops.single_byte_matcher
 static PyObject *
 _string_ops_single_byte_matcher_impl(PyObject *module, int byte)
 /*[clinic end generated code: output=51d0b2711fe82744 input=fbab89c8cb11dbce]*/
-    /* clang-format on */
-
-    static PyObject *_string_ops_single_byte_matcher_impl(PyObject *module,
-                                                          char byte) {
+{
   stringopsmodulestate *module_state = get_string_ops_module_state(module);
-  SingleByteMatcher *self;
+  /* clang-format on */
+  SingleByteMatcher *self =
+      PyObject_GC_NewVar(SingleByteMatcher, module_state->SingleByteMatcher,
+                         sizeof(SingleByteMatcher));
+  if (!self)
+    return NULL;
   self->to_match = byte;
+  PyObject_GC_Track(self);
+  if (PyErr_Occurred()) {
+    Py_DECREF(self);
+    return NULL;
+  }
   return (PyObject *)self;
+  /* clang-format off */
 }
 
 #include "clinic/string_ops.c.h"
 
-/* clang-format off */
 static PyMethodDef stringops_functions[] = {
     _STRING_OPS_SINGLE_BYTE_MATCHER_METHODDEF
     {NULL, NULL},
 };
-/* clang-format on */
 
 #define CREATE_TYPE(m, type, spec)                                             \
   do {                                                                         \

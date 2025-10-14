@@ -34,7 +34,7 @@ _string_ops_single_byte_matcher(PyObject *module, PyObject *const *args, Py_ssiz
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
         .ob_hash = -1,
-        .ob_item = { &_Py_ID(byte), },
+        .ob_item = { &_Py_ID(bytes), },
     };
     #undef NUM_KEYWORDS
     #define KWTUPLE (&_kwtuple.ob_base.ob_base)
