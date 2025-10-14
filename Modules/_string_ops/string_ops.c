@@ -40,15 +40,18 @@ static stringopsmodulestate *get_string_ops_module_state(PyObject *m) {
 #define _SearchDirection_CAST(op) ((SearchDirection *)(op))
 #define _MatchProgress_CAST(op) ((MatchProgress *)(op))
 
-PyDoc_STRVAR(_string_ops_STRINGOPS_ByteMatcher__doc__,
-             "__new__($self, byte, /)\n"
-             "--\n"
-             "\n"
-             "Creates a byte matcher for the given byte.");
+static PyObject *_string_ops_STRINGOPS_ByteMatcher(PyTypeObject *subtype,
+                                                   PyObject *args,
+                                                   PyObject *kwargs) {
+  assert(PyType_Check(subtype));
 
-static PyObject *_string_ops_STRINGOPS_ByteMatcher(PyTypeObject *type,
-                                                   PyObject *args) {
-  /* first handle args, if any */
+  assert(kwargs == NULL || PyDict_Check(kwargs));
+  if (kwargs != NULL && PyDict_GET_SIZE(kwargs)) {
+    const char *msg = "ByteMatcher() does not accept kwargs";
+    PyErr_Format(PyExc_TypeError, msg);
+    return NULL;
+  }
+
   assert(args == NULL || PyTuple_Check(args));
   Py_ssize_t len = (args != NULL) ? PyTuple_GET_SIZE(args) : 0;
   if (len > 1) {
@@ -63,42 +66,35 @@ static PyObject *_string_ops_STRINGOPS_ByteMatcher(PyTypeObject *type,
     return NULL;
   }
 
-  _PyObject_Dump((PyObject *)type);
-  _PyObject_Dump((PyObject *)kwargs);
-
-  assert(kwargs == NULL || PyDict_Check(kwargs));
-  if (kwargs != NULL && PyDict_GET_SIZE(kwargs)) {
-    const char *msg = "ByteMatcher() does not accept kwargs";
-    PyErr_Format(PyExc_TypeError, msg, len);
+  assert(len == 1);
+  SingleByteMatcher *self =
+      _SingleByteMatcher_CAST(subtype->tp_alloc(subtype, 0));
+  if (!self) {
     return NULL;
   }
-
-  _PyObject_Dump((PyObject *)args);
-
-  PyObject *other = PyTuple_GET_ITEM(args, 0); /* borrowed reference */
-  assert(other != NULL);
-  Py_INCREF(other);
-
-  char byte = PyLong_AsInt(other);
-  Py_DECREF(other);
-  if (byte == -1 && PyErr_Occurred()) {
+  int arg = PyLong_AsInt(PyTuple_GET_ITEM(args, 0));
+  if (arg == -1 && PyErr_Occurred()) {
     return NULL;
   }
-
-  SingleByteMatcher *self = (SingleByteMatcher *)type->tp_alloc(type, 0);
-  if (!self)
-    return NULL;
-  self->to_match = byte;
-  if (PyErr_Occurred()) {
-    Py_DECREF(self);
+  if (arg < 0) {
+    const char *msg = "ByteMatcher() only works on positive bytes (%d given)";
+    PyErr_Format(PyExc_ValueError, msg, arg);
     return NULL;
   }
+  if (arg > 255) {
+    const char *msg =
+        "ByteMatcher() only works on individual bytes < 256 (%zd given)";
+    PyErr_Format(PyExc_ValueError, msg, arg);
+    return NULL;
+  }
+  self->to_match = arg;
+
   return (PyObject *)self;
 }
 
 static PyObject *byte_matcher_repr(PyObject *self) {
   SingleByteMatcher *obj = _SingleByteMatcher_CAST(self);
-  return PyUnicode_FromFormat("_string_ops.ByteMatcher(%d)", obj->to_match);
+  return PyUnicode_FromFormat("ByteMatcher(%d)", obj->to_match);
 }
 
 static Py_hash_t byte_matcher_hash(PyObject *op) {
@@ -106,14 +102,11 @@ static Py_hash_t byte_matcher_hash(PyObject *op) {
   return self->to_match;
 }
 
-PyDoc_STRVAR(byte_matcher_doc, "Matcher for a single byte in a string.");
-
 static PyObject *byte_matcher_richcompare(PyObject *lefto, PyObject *righto,
                                           int op) {
   PyTypeObject *tp = Py_TYPE(lefto);
   stringopsmodulestate *module_state = _string_ops_get_state_by_class(tp);
   SingleByteMatcher *left, *right;
-  int cmp;
 
   if (!Py_IS_TYPE(righto, module_state->SingleByteMatcher)) {
     Py_RETURN_NOTIMPLEMENTED;
@@ -122,14 +115,25 @@ static PyObject *byte_matcher_richcompare(PyObject *lefto, PyObject *righto,
     /* `is` relationship implies equality. */
     return PyBool_FromLong(op == Py_EQ);
   }
-  left = (SingleByteMatcher *)lefto;
-  right = (SingleByteMatcher *)righto;
+  left = _SingleByteMatcher_CAST(lefto);
+  right = _SingleByteMatcher_CAST(righto);
 
-  cmp = left->to_match == right->to_match;
-  if (op == Py_NE) {
-    cmp = !cmp;
+  switch (op) {
+  case Py_EQ:
+    return PyBool_FromLong(left->to_match == right->to_match);
+  case Py_NE:
+    return PyBool_FromLong(left->to_match != right->to_match);
+  case Py_LT:
+    return PyBool_FromLong(left->to_match < right->to_match);
+  case Py_GT:
+    return PyBool_FromLong(left->to_match > right->to_match);
+  case Py_LE:
+    return PyBool_FromLong(left->to_match <= right->to_match);
+  case Py_GE:
+    return PyBool_FromLong(left->to_match >= right->to_match);
+  default:
+    abort();
   }
-  return PyBool_FromLong(cmp);
 }
 
 #define BYTE_MATCHER_OFF(x) offsetof(SingleByteMatcher, x)
@@ -139,35 +143,82 @@ static PyMemberDef byte_matcher_members[] = {
     {NULL} /* Sentinel */
 };
 
-static PyMethodDef byte_matcher_methods[] = {
-    {"__new__", (PyCFunction)_string_ops_STRINGOPS_ByteMatcher, METH_VARARGS,
-     _string_ops_STRINGOPS_ByteMatcher__doc__},
-    {NULL, NULL}};
-
-static PyType_Slot byte_matcher_slots[] = {
-    {Py_tp_repr, byte_matcher_repr},
-    {Py_tp_hash, byte_matcher_hash},
-    {Py_tp_doc, byte_matcher_doc},
-    {Py_tp_richcompare, byte_matcher_richcompare},
-    {Py_tp_methods, byte_matcher_methods},
-    {Py_tp_members, byte_matcher_members},
-    {0, NULL},
+/* clang-format off */
+static PyTypeObject ByteMatcherType = {
+  PyObject_HEAD_INIT(NULL)
+  .tp_basicsize = sizeof(SingleByteMatcher),
+  .tp_new = _string_ops_STRINGOPS_ByteMatcher,
+  .tp_name = "_string_ops.ByteMatcher",
+  .tp_doc = PyDoc_STR("ByteMatcher(byte, /)\n"
+                      "--\n\n"
+                      "Matcher for a single byte in a string."),
+  .tp_flags = Py_TPFLAGS_IMMUTABLETYPE,
+  .tp_repr = byte_matcher_repr,
+  .tp_hash = byte_matcher_hash,
+  .tp_richcompare = byte_matcher_richcompare,
+  .tp_members = byte_matcher_members,
 };
+/* clang-format on */
 
-static PyType_Spec byte_matcher_spec = {
-    .name = "_string_ops.ByteMatcher",
-    .basicsize = sizeof(SingleByteMatcher),
-    .flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_IMMUTABLETYPE),
-    .slots = byte_matcher_slots,
-};
+static PyObject *search_direction_base_new(PyTypeObject *subtype,
+                                           PyObject *args, PyObject *kwargs) {
+  assert(PyType_Check(subtype));
+
+  assert(kwargs == NULL || PyDict_Check(kwargs));
+  if (kwargs != NULL && PyDict_GET_SIZE(kwargs)) {
+    const char *msg = "SearchDirection() does not accept kwargs";
+    PyErr_Format(PyExc_TypeError, msg);
+    return NULL;
+  }
+
+  assert(args == NULL || PyTuple_Check(args));
+  Py_ssize_t len = (args != NULL) ? PyTuple_GET_SIZE(args) : 0;
+  if (len > 1) {
+    const char *msg =
+        "_SearchDirection() takes at most 1 positional argument (%zd given)";
+    PyErr_Format(PyExc_TypeError, msg, len);
+    return NULL;
+  } else if (!len) {
+    const char *msg = "_SearchDirection() requires at least 1 positional "
+                      "argument (%zd given)";
+    PyErr_Format(PyExc_TypeError, msg, len);
+    return NULL;
+  }
+
+  assert(len == 1);
+  SearchDirection *self = _SearchDirection_CAST(subtype->tp_alloc(subtype, 0));
+  if (!self) {
+    return NULL;
+  }
+  int arg = PyLong_AsInt(PyTuple_GET_ITEM(args, 0));
+  if (arg == -1 && PyErr_Occurred()) {
+    return NULL;
+  }
+  switch (arg) {
+  case LEFT:
+    self->direction = LEFT;
+    break;
+  case RIGHT:
+    self->direction = RIGHT;
+    break;
+  default:
+    const char *msg = "_SearchDirection() requires either LEFT(%zd) or "
+                      "RIGHT(%zd) as an argument (%zd given)";
+    PyErr_Format(PyExc_KeyError, msg, LEFT, RIGHT, arg);
+    return NULL;
+  }
+  self->direction = arg;
+
+  return (PyObject *)self;
+}
 
 static PyObject *search_direction_repr(PyObject *self) {
   SearchDirection *obj = _SearchDirection_CAST(self);
   switch (obj->direction) {
   case LEFT:
-    return PyUnicode_FromString("_string_ops.SearchDirection.LEFT()");
+    return PyUnicode_FromString("SearchDirection.LEFT");
   case RIGHT:
-    return PyUnicode_FromString("_string_ops.SearchDirection.RIGHT()");
+    return PyUnicode_FromString("SearchDirection.RIGHT");
   default:
     abort();
   }
@@ -192,8 +243,8 @@ static PyObject *search_direction_richcompare(PyObject *lefto, PyObject *righto,
     /* `is` relationship implies equality. */
     return PyBool_FromLong(op == Py_EQ);
   }
-  left = (SearchDirection *)lefto;
-  right = (SearchDirection *)righto;
+  left = _SearchDirection_CAST(lefto);
+  right = _SearchDirection_CAST(righto);
 
   cmp = left->direction == right->direction;
   if (op == Py_NE) {
@@ -202,74 +253,22 @@ static PyObject *search_direction_richcompare(PyObject *lefto, PyObject *righto,
   return PyBool_FromLong(cmp);
 }
 
-static PyObject *
-_string_ops_STRINGOPS_SearchDirection_LEFT(PyTypeObject *type) {
-  assert(PyType_Check(type));
-  SearchDirection *self = (SearchDirection *)type->tp_alloc(type, 0);
-  if (!self)
-    return NULL;
-  self->direction = LEFT;
-  if (PyErr_Occurred()) {
-    Py_DECREF(self);
-    return NULL;
-  }
-  return (PyObject *)self;
-}
-
-static PyObject *
-_string_ops_STRINGOPS_SearchDirection_RIGHT(PyTypeObject *type) {
-  assert(PyType_Check(type));
-  SearchDirection *self = (SearchDirection *)type->tp_alloc(type, 0);
-  if (!self)
-    return NULL;
-  self->direction = RIGHT;
-  if (PyErr_Occurred()) {
-    Py_DECREF(self);
-    return NULL;
-  }
-  return (PyObject *)self;
-}
-
-PyDoc_STRVAR(
-    _string_ops_STRINGOPS_SearchDirection_LEFT__doc__,
-    "LEFT($self, /)\n"
-    "--\n"
-    "\n"
-    "Begins matching at the end of the string and goes towards the beginning.");
-
-PyDoc_STRVAR(
-    _string_ops_STRINGOPS_SearchDirection_RIGHT__doc__,
-    "RIGHT($self, /)\n"
-    "--\n"
-    "\n"
-    "Begins matching at the start of the string and goes towards the end.");
-
-static PyMethodDef search_direction_methods[] = {
-    {"LEFT", (PyCFunction)_string_ops_STRINGOPS_SearchDirection_LEFT,
-     METH_NOARGS, _string_ops_STRINGOPS_SearchDirection_LEFT__doc__},
-    {"RIGHT", (PyCFunction)_string_ops_STRINGOPS_SearchDirection_RIGHT,
-     METH_NOARGS, _string_ops_STRINGOPS_SearchDirection_RIGHT__doc__},
-    {NULL, NULL},
+/* clang-format off */
+static PyTypeObject SearchDirectionType = {
+  PyObject_HEAD_INIT(NULL)
+  .tp_basicsize = sizeof(SearchDirection),
+  .tp_new = search_direction_base_new,
+  .tp_name = "_string_ops._SearchDirection",
+  .tp_doc = PyDoc_STR("SearchDirection\n"
+             "--\n"
+             "\n"
+             "Direction to begin a byte search in a string."),
+  .tp_flags = Py_TPFLAGS_BASETYPE,
+  .tp_repr = search_direction_repr,
+  .tp_hash = search_direction_hash,
+  .tp_richcompare = search_direction_richcompare,
 };
-
-PyDoc_STRVAR(search_direction_doc,
-             "Direction to begin a byte search in a string.");
-
-static PyType_Slot search_direction_slots[] = {
-    {Py_tp_repr, search_direction_repr},
-    {Py_tp_hash, search_direction_hash},
-    {Py_tp_doc, search_direction_doc},
-    {Py_tp_richcompare, search_direction_richcompare},
-    {Py_tp_methods, search_direction_methods},
-    {0, NULL},
-};
-
-static PyType_Spec search_direction_spec = {
-    .name = "_string_ops.SearchDirection",
-    .basicsize = sizeof(SearchDirection),
-    .flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_IMMUTABLETYPE),
-    .slots = search_direction_slots,
-};
+/* clang-format on */
 
 static int match_progress_traverse(PyObject *op, visitproc visit, void *arg) {
   MatchProgress *self = _MatchProgress_CAST(op);
@@ -362,83 +361,31 @@ static PyGetSetDef match_progress_getset[] = {
     {NULL} /* Sentinel */
 };
 
-PyDoc_STRVAR(match_progress_doc, "State necessary to track the progress of "
-                                 "matching instances of a byte in a string.");
-
-static PyType_Slot match_progress_slots[] = {
-    {Py_tp_dealloc, match_progress_dealloc},
-    /* {Py_tp_repr, match_progress_repr}, */
-    {Py_tp_doc, match_progress_doc},
-    /* {Py_tp_methods, match_progress_methods}, */
-    {Py_tp_members, match_progress_members},
-    {Py_tp_getset, match_progress_getset},
-    {Py_tp_traverse, match_progress_traverse},
-    {Py_tp_traverse, match_progress_clear},
-    {0, NULL},
+/* clang-format off */
+static PyTypeObject MatchProgressType = {
+  PyObject_HEAD_INIT(NULL)
+  .tp_basicsize = sizeof(MatchProgress),
+  .tp_name = "_string_ops.MatchProgress",
+  .tp_doc = PyDoc_STR("MatchProgress()\n"
+                      "--\n\n"
+                      "State necessary to track the progress of "
+                      "matching instances of a byte in a string."),
+  .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
+  .tp_members = match_progress_members,
+  .tp_getset = match_progress_getset,
+  .tp_traverse = match_progress_traverse,
+  .tp_clear = match_progress_clear,
+  .tp_dealloc = match_progress_dealloc,
 };
-
-static PyType_Spec match_progress_spec = {
-    .name = "_string_ops.MatchProgress",
-    .basicsize = sizeof(MatchProgress),
-    .flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_DISALLOW_INSTANTIATION |
-              Py_TPFLAGS_HAVE_GC),
-    .slots = match_progress_slots,
-};
-
-PyDoc_STRVAR(_string_ops_ByteMatcher__doc__,
-             "ByteMatcher($byte, /)\n"
-             "--\n"
-             "\n"
-             "Returns a matcher for the single given byte.");
-
-static PyObject *_string_ops_ByteMatcher(PyObject *module, PyObject *args,
-                                         PyObject *kwargs) {
-  stringopsmodulestate *state = get_string_ops_module_state(module);
-  _PyObject_Dump((PyObject *)module);
-  _PyObject_Dump((PyObject *)state);
-  _PyObject_Dump((PyObject *)args);
-  _PyObject_Dump((PyObject *)kwargs);
-  return _string_ops_STRINGOPS_ByteMatcher(state->SingleByteMatcher, args,
-                                           kwargs);
-}
-
-PyDoc_STRVAR(_string_ops_LEFT__doc__,
-             "LEFT($module, /)\n"
-             "--\n"
-             "\n"
-             "Returns the same method from `SearchDirection`.");
-
-static PyObject *_string_ops_LEFT(PyObject *module) {
-  stringopsmodulestate *state = get_string_ops_module_state(module);
-
-  return _string_ops_STRINGOPS_SearchDirection_LEFT(state->SearchDirection);
-}
-
-static PyObject *_string_ops_RIGHT(PyObject *module) {
-  stringopsmodulestate *state = get_string_ops_module_state(module);
-  return _string_ops_STRINGOPS_SearchDirection_RIGHT(state->SearchDirection);
-}
-
-PyDoc_STRVAR(_string_ops_RIGHT__doc__,
-             "RIGHT($module, /)\n"
-             "--\n"
-             "\n"
-             "Returns the same method from `SearchDirection`.");
+/* clang-format on */
 
 static PyMethodDef stringops_functions[] = {
-    {"ByteMatcher", (PyCFunction)_string_ops_ByteMatcher, METH_VARARGS,
-     _string_ops_ByteMatcher__doc__},
-    {"LEFT", (PyCFunction)_string_ops_LEFT, METH_NOARGS,
-     _string_ops_LEFT__doc__},
-    {"RIGHT", (PyCFunction)_string_ops_RIGHT, METH_NOARGS,
-     _string_ops_RIGHT__doc__},
     {NULL, NULL},
 };
 
-#define CREATE_TYPE(m, type, spec)                                             \
+#define ADD_TYPE(m, type)                                                      \
   do {                                                                         \
-    type = (PyTypeObject *)PyType_FromModuleAndSpec(m, spec, NULL);            \
-    if (type == NULL) {                                                        \
+    if (PyModule_AddType(m, type) < 0) {                                       \
       goto error;                                                              \
     }                                                                          \
   } while (0)
@@ -446,11 +393,18 @@ static PyMethodDef stringops_functions[] = {
 static int string_ops_exec(PyObject *m) {
   stringopsmodulestate *state;
 
-  /* Create heap types */
   state = get_string_ops_module_state(m);
-  CREATE_TYPE(m, state->SingleByteMatcher, &byte_matcher_spec);
-  CREATE_TYPE(m, state->SearchDirection, &search_direction_spec);
-  CREATE_TYPE(m, state->MatchProgress, &match_progress_spec);
+
+  state->SingleByteMatcher = &ByteMatcherType;
+  state->SearchDirection = &SearchDirectionType;
+  state->MatchProgress = &MatchProgressType;
+
+  ADD_TYPE(m, state->SingleByteMatcher);
+  ADD_TYPE(m, state->SearchDirection);
+
+  if (PyModule_AddIntConstant(m, "MAGIC", 777) < 0) {
+    goto error;
+  }
 
   return 0;
 

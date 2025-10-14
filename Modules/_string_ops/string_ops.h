@@ -6,22 +6,22 @@
 #define STRING_OPS_INCLUDED
 
 typedef struct {
-  PyObject_VAR_HEAD
-  char to_match;
+  PyObject_HEAD
+  unsigned char to_match;
 } SingleByteMatcher;
 
 typedef enum {
-  LEFT,
-  RIGHT,
+  LEFT = 0,
+  RIGHT = 1,
 } SearchDirectionData;
 
 typedef struct {
-  PyObject_VAR_HEAD
+  PyObject_HEAD
   SearchDirectionData direction;
 } SearchDirection;
 
 typedef struct {
-  PyObject_VAR_HEAD
+  PyObject_HEAD
   PyObject* string;
   Py_ssize_t cur_pos;
   PyObject* direction;
