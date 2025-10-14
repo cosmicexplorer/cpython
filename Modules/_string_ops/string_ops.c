@@ -25,10 +25,18 @@ static stringopsmodulestate *get_string_ops_module_state(PyObject *m) {
   return state;
 }
 
-#define _string_ops_get_state_by_type(cls)                                     \
-  get_string_ops_module_state(PyType_GetModuleByDef(cls, &stringopsmodule))
+#define _string_ops_get_state_by_class(cls)                                    \
+  get_string_ops_module_state(PyType_GetModule(cls))
 
 #define _SingleByteMatcher_CAST(op) ((SingleByteMatcher *)(op))
+
+/* clang-format off */
+/*[clinic input]
+module _string_ops
+class _string_ops.STRINGOPS_ByteMatcher "SingleByteMatcher *" "get_string_ops_module_state_by_class(tp)->SingleByteMatcher"
+[clinic start generated code]*/
+/*[clinic end generated code: output=da39a3ee5e6b4b0d input=4febd4ac65ce3de2]*/
+/* clang-format on */
 
 static PyObject *byte_matcher_repr(PyObject *self) {
   SingleByteMatcher *obj = _SingleByteMatcher_CAST(self);
@@ -45,7 +53,7 @@ PyDoc_STRVAR(byte_matcher_doc, "Matcher for a single byte in a string.");
 static PyObject *byte_matcher_richcompare(PyObject *lefto, PyObject *righto,
                                           int op) {
   PyTypeObject *tp = Py_TYPE(lefto);
-  stringopsmodulestate *module_state = _string_ops_get_state_by_type(tp);
+  stringopsmodulestate *module_state = _string_ops_get_state_by_class(tp);
   SingleByteMatcher *left, *right;
   int cmp;
 
@@ -66,7 +74,8 @@ static PyObject *byte_matcher_richcompare(PyObject *lefto, PyObject *righto,
   return PyBool_FromLong(cmp);
 }
 
-/* static PyObject *byte_matcher_byte(PyObject *op, void *Py_UNUSED(ignored)) { */
+/* static PyObject *byte_matcher_byte(PyObject *op, void *Py_UNUSED(ignored)) {
+ */
 /*   SingleByteMatcher *self = _SingleByteMatcher_CAST(op); */
 /*   return PyLong_FromLong(self->to_match); */
 /* } */
@@ -84,11 +93,7 @@ static PyMemberDef byte_matcher_members[] = {
     {NULL} /* Sentinel */
 };
 
-#include "clinic/sre.c.h"
-
-static PyMethodDef byte_matcher_methods[] = {
-  {NULL, NULL}
-};
+static PyMethodDef byte_matcher_methods[] = {{NULL, NULL}};
 
 static PyType_Slot byte_matcher_slots[] = {
     {Py_tp_repr, byte_matcher_repr},
@@ -109,7 +114,35 @@ static PyType_Spec byte_matcher_spec = {
     .slots = byte_matcher_slots,
 };
 
-static PyMethodDef stringops_functions[] = {{NULL, NULL, 0, NULL}};
+/* clang-format off */
+/*[clinic input]
+_string_ops.single_byte_matcher
+
+    byte: int
+
+[clinic start generated code]*/
+
+static PyObject *
+_string_ops_single_byte_matcher_impl(PyObject *module, int byte)
+/*[clinic end generated code: output=51d0b2711fe82744 input=fbab89c8cb11dbce]*/
+    /* clang-format on */
+
+    static PyObject *_string_ops_single_byte_matcher_impl(PyObject *module,
+                                                          char byte) {
+  stringopsmodulestate *module_state = get_string_ops_module_state(module);
+  SingleByteMatcher *self;
+  self->to_match = byte;
+  return (PyObject *)self;
+}
+
+#include "clinic/string_ops.c.h"
+
+/* clang-format off */
+static PyMethodDef stringops_functions[] = {
+    _STRING_OPS_SINGLE_BYTE_MATCHER_METHODDEF
+    {NULL, NULL},
+};
+/* clang-format on */
 
 #define CREATE_TYPE(m, type, spec)                                             \
   do {                                                                         \
