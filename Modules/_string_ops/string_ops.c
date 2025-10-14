@@ -10,6 +10,12 @@
 #include "pycore_object.h"        // _PyObject_XSetRefDelayed()
 #include "pycore_unicodeobject.h" // _PyUnicode_Copy()
 
+#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+#include "pycore_gc.h"      // PyGC_Head
+#include "pycore_runtime.h" // _Py_ID()
+#endif
+#include "pycore_modsupport.h" // _PyArg_UnpackKeywords()
+
 #include "string_ops.h"
 
 static struct PyModuleDef stringopsmodule;
@@ -34,19 +40,61 @@ static stringopsmodulestate *get_string_ops_module_state(PyObject *m) {
 #define _SearchDirection_CAST(op) ((SearchDirection *)(op))
 #define _MatchProgress_CAST(op) ((MatchProgress *)(op))
 
-/* clang-format off */
+PyDoc_STRVAR(_string_ops_STRINGOPS_ByteMatcher__doc__,
+             "__new__($self, byte, /)\n"
+             "--\n"
+             "\n"
+             "Creates a byte matcher for the given byte.");
 
-/*[clinic input]
-module _string_ops
-class _string_ops.STRINGOPS_ByteMatcher "SingleByteMatcher *" "get_string_ops_module_state_by_class(tp)->SingleByteMatcher"
-class _string_ops.STRINGOPS_SearchDirection "SearchDirection *" "get_string_ops_module_state_by_class(tp)->SearchDirection"
-class _string_ops.STRINGOPS_MatchProgress "MatchProgress *" "get_string_ops_module_state_by_class(tp)->MatchProgress"
-[clinic start generated code]*/
-/*[clinic end generated code: output=da39a3ee5e6b4b0d input=7c9b7291970485e3]*/
+static PyObject *_string_ops_STRINGOPS_ByteMatcher(PyTypeObject *type,
+                                                   PyObject *args) {
+  /* first handle args, if any */
+  assert(args == NULL || PyTuple_Check(args));
+  Py_ssize_t len = (args != NULL) ? PyTuple_GET_SIZE(args) : 0;
+  if (len > 1) {
+    const char *msg =
+        "ByteMatcher() takes at most 1 positional argument (%zd given)";
+    PyErr_Format(PyExc_TypeError, msg, len);
+    return NULL;
+  } else if (!len) {
+    const char *msg =
+        "ByteMatcher() requires at least 1 positional argument (%zd given)";
+    PyErr_Format(PyExc_TypeError, msg, len);
+    return NULL;
+  }
 
-/* clang-format on */
+  _PyObject_Dump((PyObject *)type);
+  _PyObject_Dump((PyObject *)kwargs);
 
-#include "clinic/string_ops.c.h"
+  assert(kwargs == NULL || PyDict_Check(kwargs));
+  if (kwargs != NULL && PyDict_GET_SIZE(kwargs)) {
+    const char *msg = "ByteMatcher() does not accept kwargs";
+    PyErr_Format(PyExc_TypeError, msg, len);
+    return NULL;
+  }
+
+  _PyObject_Dump((PyObject *)args);
+
+  PyObject *other = PyTuple_GET_ITEM(args, 0); /* borrowed reference */
+  assert(other != NULL);
+  Py_INCREF(other);
+
+  char byte = PyLong_AsInt(other);
+  Py_DECREF(other);
+  if (byte == -1 && PyErr_Occurred()) {
+    return NULL;
+  }
+
+  SingleByteMatcher *self = (SingleByteMatcher *)type->tp_alloc(type, 0);
+  if (!self)
+    return NULL;
+  self->to_match = byte;
+  if (PyErr_Occurred()) {
+    Py_DECREF(self);
+    return NULL;
+  }
+  return (PyObject *)self;
+}
 
 static PyObject *byte_matcher_repr(PyObject *self) {
   SingleByteMatcher *obj = _SingleByteMatcher_CAST(self);
@@ -92,6 +140,8 @@ static PyMemberDef byte_matcher_members[] = {
 };
 
 static PyMethodDef byte_matcher_methods[] = {
+    {"__new__", (PyCFunction)_string_ops_STRINGOPS_ByteMatcher, METH_VARARGS,
+     _string_ops_STRINGOPS_ByteMatcher__doc__},
     {NULL, NULL}};
 
 static PyType_Slot byte_matcher_slots[] = {
@@ -152,13 +202,55 @@ static PyObject *search_direction_richcompare(PyObject *lefto, PyObject *righto,
   return PyBool_FromLong(cmp);
 }
 
-/* clang-format off */
+static PyObject *
+_string_ops_STRINGOPS_SearchDirection_LEFT(PyTypeObject *type) {
+  assert(PyType_Check(type));
+  SearchDirection *self = (SearchDirection *)type->tp_alloc(type, 0);
+  if (!self)
+    return NULL;
+  self->direction = LEFT;
+  if (PyErr_Occurred()) {
+    Py_DECREF(self);
+    return NULL;
+  }
+  return (PyObject *)self;
+}
+
+static PyObject *
+_string_ops_STRINGOPS_SearchDirection_RIGHT(PyTypeObject *type) {
+  assert(PyType_Check(type));
+  SearchDirection *self = (SearchDirection *)type->tp_alloc(type, 0);
+  if (!self)
+    return NULL;
+  self->direction = RIGHT;
+  if (PyErr_Occurred()) {
+    Py_DECREF(self);
+    return NULL;
+  }
+  return (PyObject *)self;
+}
+
+PyDoc_STRVAR(
+    _string_ops_STRINGOPS_SearchDirection_LEFT__doc__,
+    "LEFT($self, /)\n"
+    "--\n"
+    "\n"
+    "Begins matching at the end of the string and goes towards the beginning.");
+
+PyDoc_STRVAR(
+    _string_ops_STRINGOPS_SearchDirection_RIGHT__doc__,
+    "RIGHT($self, /)\n"
+    "--\n"
+    "\n"
+    "Begins matching at the start of the string and goes towards the end.");
+
 static PyMethodDef search_direction_methods[] = {
-    _STRING_OPS_STRINGOPS_SEARCHDIRECTION_LEFT_METHODDEF
-    _STRING_OPS_STRINGOPS_SEARCHDIRECTION_RIGHT_METHODDEF
+    {"LEFT", (PyCFunction)_string_ops_STRINGOPS_SearchDirection_LEFT,
+     METH_NOARGS, _string_ops_STRINGOPS_SearchDirection_LEFT__doc__},
+    {"RIGHT", (PyCFunction)_string_ops_STRINGOPS_SearchDirection_RIGHT,
+     METH_NOARGS, _string_ops_STRINGOPS_SearchDirection_RIGHT__doc__},
     {NULL, NULL},
 };
-/* clang-format on */
 
 PyDoc_STRVAR(search_direction_doc,
              "Direction to begin a byte search in a string.");
@@ -293,86 +385,53 @@ static PyType_Spec match_progress_spec = {
     .slots = match_progress_slots,
 };
 
-/* clang-format off */
+PyDoc_STRVAR(_string_ops_ByteMatcher__doc__,
+             "ByteMatcher($byte, /)\n"
+             "--\n"
+             "\n"
+             "Returns a matcher for the single given byte.");
 
-/*[clinic input]
-@classmethod
-_string_ops.STRINGOPS_ByteMatcher.__new__
-
-    byte: int
-
-[clinic start generated code]*/
-
-static PyObject *
-_string_ops_STRINGOPS_ByteMatcher_impl(PyTypeObject *type, int byte)
-/*[clinic end generated code: output=4767a234e617d813 input=32e29ff947165716]*/
-{
-
-  /* clang-format on */
-  SingleByteMatcher *self = (SingleByteMatcher *)type->tp_alloc(type, 0);
-  if (!self)
-    return NULL;
-  self->to_match = byte;
-  PyObject_GC_Track(self);
-  if (PyErr_Occurred()) {
-    Py_DECREF(self);
-    return NULL;
-  }
-  return (PyObject *)self;
-  /* clang-format off */
+static PyObject *_string_ops_ByteMatcher(PyObject *module, PyObject *args,
+                                         PyObject *kwargs) {
+  stringopsmodulestate *state = get_string_ops_module_state(module);
+  _PyObject_Dump((PyObject *)module);
+  _PyObject_Dump((PyObject *)state);
+  _PyObject_Dump((PyObject *)args);
+  _PyObject_Dump((PyObject *)kwargs);
+  return _string_ops_STRINGOPS_ByteMatcher(state->SingleByteMatcher, args,
+                                           kwargs);
 }
 
-/*[clinic input]
-@classmethod
-_string_ops.STRINGOPS_SearchDirection.LEFT
+PyDoc_STRVAR(_string_ops_LEFT__doc__,
+             "LEFT($module, /)\n"
+             "--\n"
+             "\n"
+             "Returns the same method from `SearchDirection`.");
 
-Begins matching at the end of the string and goes towards the beginning.
-[clinic start generated code]*/
+static PyObject *_string_ops_LEFT(PyObject *module) {
+  stringopsmodulestate *state = get_string_ops_module_state(module);
 
-static PyObject *
-_string_ops_STRINGOPS_SearchDirection_LEFT_impl(PyTypeObject *type)
-/*[clinic end generated code: output=580bac40431fda8d input=153aca64f0c902fc]*/
-{
-  /* clang-format on */
-  SearchDirection *self = (SearchDirection *)type->tp_alloc(type, 0);
-  if (!self)
-    return NULL;
-  self->direction = LEFT;
-  PyObject_GC_Track(self);
-  if (PyErr_Occurred()) {
-    Py_DECREF(self);
-    return NULL;
-  }
-  return (PyObject *)self;
-  /* clang-format off */
+  return _string_ops_STRINGOPS_SearchDirection_LEFT(state->SearchDirection);
 }
 
-/*[clinic input]
-@classmethod
-_string_ops.STRINGOPS_SearchDirection.RIGHT
-
-Begins matching at the start of the string and goes towards the end.
-[clinic start generated code]*/
-
-static PyObject *
-_string_ops_STRINGOPS_SearchDirection_RIGHT_impl(PyTypeObject *type)
-/*[clinic end generated code: output=3d278fb39e1757c0 input=0905c04f110e4b0b]*/
-{
-  /* clang-format on */
-  SearchDirection *self = (SearchDirection *)type->tp_alloc(type, 0);
-  if (!self)
-    return NULL;
-  self->direction = RIGHT;
-  PyObject_GC_Track(self);
-  if (PyErr_Occurred()) {
-    Py_DECREF(self);
-    return NULL;
-  }
-  return (PyObject *)self;
-  /* clang-format off */
+static PyObject *_string_ops_RIGHT(PyObject *module) {
+  stringopsmodulestate *state = get_string_ops_module_state(module);
+  return _string_ops_STRINGOPS_SearchDirection_RIGHT(state->SearchDirection);
 }
+
+PyDoc_STRVAR(_string_ops_RIGHT__doc__,
+             "RIGHT($module, /)\n"
+             "--\n"
+             "\n"
+             "Returns the same method from `SearchDirection`.");
 
 static PyMethodDef stringops_functions[] = {
+    {"ByteMatcher", (PyCFunction)_string_ops_ByteMatcher, METH_VARARGS,
+     _string_ops_ByteMatcher__doc__},
+    {"LEFT", (PyCFunction)_string_ops_LEFT, METH_NOARGS,
+     _string_ops_LEFT__doc__},
+    {"RIGHT", (PyCFunction)_string_ops_RIGHT, METH_NOARGS,
+     _string_ops_RIGHT__doc__},
     {NULL, NULL},
 };
 
