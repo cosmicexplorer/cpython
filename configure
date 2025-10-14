@@ -32724,7 +32724,7 @@ fi
 #
 # Although AVX support is not guaranteed on Android
 # (https://developer.android.com/ndk/guides/abis#86-64), this is safe because we do a
-# runtime CPUID check.
+# runtime CPUID check (where???).
 if test "$ac_sys_system" != "Linux-android" -a "$ac_sys_system" != "WASI" || \
    { test -n "$ANDROID_API_LEVEL" && test "$ANDROID_API_LEVEL" -ge 28; }
 then
@@ -33090,6 +33090,73 @@ printf "%s\n" "$py_cv_module__hmac" >&6; }
 
 
 ### end(cryptographic primitives)
+
+### start(simd intrinsics for non-cryptographic string and byte operations)
+
+
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for 128-bit SIMD string operations" >&5
+printf %s "checking for 128-bit SIMD string operations... " >&6; }
+if test ${ac_cv_128_simd_string_ops+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e)
+  _flags_128='-msse -msse2 -msse3 -msse4.1 -msse4.2'
+  save_CFLAGS=$CFLAGS
+save_CPPFLAGS=$CPPFLAGS
+save_LDFLAGS=$LDFLAGS
+save_LIBS=$LIBS
+
+
+    CFLAGS="$CFLAGS $_flags_128"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+      #include <xmmintrin.h>
+      #include <immintrin.h>
+
+      int main() {
+          __m128 p1 = _mm_set_ps(0.1, 0.2, 0.3, 0.4);
+          __m128 p2 = _mm_set_ps(-0.1, 0.25, 3000, -40.2);
+          __m128 p3 = _mm_or_ps(p1, p2);
+          float result4;
+          _mm_store_ps(result, p3);
+          // The autoconf docs recommend against testing any runtime behavior
+          // to avoid creating issues cross-compiling.
+      }
+
+int
+main (void)
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+  ac_cv_128_simd_string_ops="$_flags_128"
+else case e in #(
+  e) ac_cv_128_simd_string_ops=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+
+CFLAGS=$save_CFLAGS
+CPPFLAGS=$save_CPPFLAGS
+LDFLAGS=$save_LDFLAGS
+LIBS=$save_LIBS
+
+
+ ;;
+esac
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_128_simd_string_ops" >&5
+printf "%s\n" "$ac_cv_128_simd_string_ops" >&6; }
+
+### end(simd intrinsics)
 
 
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for stdlib extension module _ctypes" >&5

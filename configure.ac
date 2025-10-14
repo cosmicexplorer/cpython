@@ -8042,7 +8042,7 @@ AC_SUBST([LIBHACL_BLAKE2_SIMD128_OBJS])
 #
 # Although AVX support is not guaranteed on Android
 # (https://developer.android.com/ndk/guides/abis#86-64), this is safe because we do a
-# runtime CPUID check.
+# runtime CPUID check (where???).
 if test "$ac_sys_system" != "Linux-android" -a "$ac_sys_system" != "WASI" || \
    { test -n "$ANDROID_API_LEVEL" && test "$ANDROID_API_LEVEL" -ge 28; }
 then
@@ -8111,6 +8111,47 @@ dnl For Emscripten, we disable HACL* HMAC as it is tricky to make it work.
 dnl See https://github.com/python/cpython/issues/133042.
 PY_HACL_CREATE_MODULE([HMAC], [_hmac], [test "$ac_sys_system" != "Emscripten"])
 ### end(cryptographic primitives)
+
+### start(simd intrinsics for non-cryptographic string and byte operations)
+dnl hacl being appropriated from a separate module makes its configuration somewhat separate from
+dnl the rest of the build script. since this is a proposed new feature, let's separate the
+dnl configuration at first and ask maintainers for whether/how they might integrate these checks.
+
+dnl Modules/_hacl/README.md also tells me "Never manually edit HACL\* files".
+
+dnl Modules/_hacl/include/krml/internal/target.h is copyrighted inria and microsoft, but is making
+dnl strong assertions about support for aligned_alloc() in android above and macos in
+dnl 329165639f9ac00ba64f6493dbcafcef6955e2cb. Seems like a conflict of interest.
+
+dnl This comment https://github.com/android/ndk/issues/1339#issuecomment-676821211 explicitly
+dnl describes:
+dnl > Right, use memalign or posix_memalign instead.
+dnl At the moment, it seems like this is perhaps none of our business.
+
+AC_CACHE_CHECK([for 128-bit SIMD string operations], [ac_cv_128_simd_string_ops], [
+  _flags_128='-msse -msse2 -msse3 -msse4.1 -msse4.2'
+  WITH_SAVE_ENV([
+    CFLAGS="$CFLAGS $_flags_128"
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([
+      @%:@include <xmmintrin.h>
+      @%:@include <immintrin.h>
+
+      int main() {
+          __m128 p1 = _mm_set_ps(0.1, 0.2, 0.3, 0.4);
+          __m128 p2 = _mm_set_ps(-0.1, 0.25, 3000, -40.2);
+          __m128 p3 = _mm_or_ps(p1, p2);
+          float result[4];
+          _mm_store_ps(result, p3);
+          // The autoconf docs recommend against testing any runtime behavior
+          // to avoid creating issues cross-compiling.
+      }
+    ])],
+    [ac_cv_128_simd_string_ops="$_flags_128"],
+    [ac_cv_128_simd_string_ops=no])
+  ])
+])
+
+### end(simd intrinsics)
 
 PY_STDLIB_MOD([_ctypes],
   [], [test "$have_libffi" = yes],
