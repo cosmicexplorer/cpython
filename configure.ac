@@ -8128,15 +8128,15 @@ dnl describes:
 dnl > Right, use memalign or posix_memalign instead.
 dnl At the moment, it seems like this is perhaps none of our business.
 
-AC_CACHE_CHECK([for 128-bit SIMD string operations], [ac_cv_128_simd_string_ops], [
+AC_CACHE_CHECK([for 128-bit (x86-only) SIMD string operations], [ac_cv_x86_128_simd_flags], [
   _flags_128='-msse -msse2 -msse3 -msse4.1 -msse4.2'
   WITH_SAVE_ENV([
     CFLAGS="$CFLAGS $_flags_128"
-    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([
+    AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
       @%:@include <xmmintrin.h>
       @%:@include <immintrin.h>
 
-      int main() {
+      void main() {
           __m128 p1 = _mm_set_ps(0.1, 0.2, 0.3, 0.4);
           __m128 p2 = _mm_set_ps(-0.1, 0.25, 3000, -40.2);
           __m128 p3 = _mm_or_ps(p1, p2);
@@ -8145,9 +8145,32 @@ AC_CACHE_CHECK([for 128-bit SIMD string operations], [ac_cv_128_simd_string_ops]
           // The autoconf docs recommend against testing any runtime behavior
           // to avoid creating issues cross-compiling.
       }
-    ])],
-    [ac_cv_128_simd_string_ops="$_flags_128"],
-    [ac_cv_128_simd_string_ops=no])
+    ]])],
+    [ac_cv_x86_128_simd_flags="$_flags_128"],
+    [ac_cv_x86_128_simd_flags=no])
+  ])
+])
+
+AC_CACHE_CHECK([for 256-bit (x86-only) SIMD string operations], [ac_cv_x86_256_simd_flags], [
+  _flags_256='-mavx2'
+  WITH_SAVE_ENV([
+    CFLAGS="$CFLAGS $_flags_256"
+    AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+      @%:@include <xmmintrin.h>
+      @%:@include <immintrin.h>
+
+      void main() {
+          __m256 p1 = _mm256_set_ps(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8);
+          __m256 p2 = _mm256_set_ps(-0.1, 0.25, 3000, -40.2, -50.4, 100.4, 98.6, -0.1);
+          __m256 p3 = _mm256_or_ps(p1, p2);
+          float result[8];
+          _mm256_store_ps(result, p3);
+          // The autoconf docs recommend against testing any runtime behavior
+          // to avoid creating issues cross-compiling.
+      }
+    ]])],
+    [ac_cv_x86_256_simd_flags="$_flags_256"],
+    [ac_cv_x86_256_simd_flags=no])
   ])
 ])
 

@@ -33096,9 +33096,9 @@ printf "%s\n" "$py_cv_module__hmac" >&6; }
 
 
 
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for 128-bit SIMD string operations" >&5
-printf %s "checking for 128-bit SIMD string operations... " >&6; }
-if test ${ac_cv_128_simd_string_ops+y}
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for 128-bit (x86-only) SIMD string operations" >&5
+printf %s "checking for 128-bit (x86-only) SIMD string operations... " >&6; }
+if test ${ac_cv_x86_128_simd_flags+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
@@ -33117,29 +33117,22 @@ save_LIBS=$LIBS
       #include <xmmintrin.h>
       #include <immintrin.h>
 
-      int main() {
+      void main() {
           __m128 p1 = _mm_set_ps(0.1, 0.2, 0.3, 0.4);
           __m128 p2 = _mm_set_ps(-0.1, 0.25, 3000, -40.2);
           __m128 p3 = _mm_or_ps(p1, p2);
-          float result4;
+          float result[4];
           _mm_store_ps(result, p3);
           // The autoconf docs recommend against testing any runtime behavior
           // to avoid creating issues cross-compiling.
       }
 
-int
-main (void)
-{
-
-  ;
-  return 0;
-}
 _ACEOF
 if ac_fn_c_try_compile "$LINENO"
 then :
-  ac_cv_128_simd_string_ops="$_flags_128"
+  ac_cv_x86_128_simd_flags="$_flags_128"
 else case e in #(
-  e) ac_cv_128_simd_string_ops=no ;;
+  e) ac_cv_x86_128_simd_flags=no ;;
 esac
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
@@ -33150,11 +33143,68 @@ LDFLAGS=$save_LDFLAGS
 LIBS=$save_LIBS
 
 
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_x86_128_simd_flags" >&5
+printf "%s\n" "$ac_cv_x86_128_simd_flags" >&6; }
  ;;
 esac
 fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_128_simd_string_ops" >&5
-printf "%s\n" "$ac_cv_128_simd_string_ops" >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_x86_128_simd_flags" >&5
+printf "%s\n" "$ac_cv_x86_128_simd_flags" >&6; }
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for 256-bit (x86-only) SIMD string operations" >&5
+printf %s "checking for 256-bit (x86-only) SIMD string operations... " >&6; }
+if test ${ac_cv_x86_256_simd_flags+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e)
+  _flags_256='-mavx2'
+  save_CFLAGS=$CFLAGS
+save_CPPFLAGS=$CPPFLAGS
+save_LDFLAGS=$LDFLAGS
+save_LIBS=$LIBS
+
+
+    CFLAGS="$CFLAGS $_flags_256"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+      #include <xmmintrin.h>
+      #include <immintrin.h>
+
+      void main() {
+          __m256 p1 = _mm256_set_ps(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8);
+          __m256 p2 = _mm256_set_ps(-0.1, 0.25, 3000, -40.2, -50.4, 100.4, 98.6, -0.1);
+          __m256 p3 = _mm256_or_ps(p1, p2);
+          float result[8];
+          _mm256_store_ps(result, p3);
+          // The autoconf docs recommend against testing any runtime behavior
+          // to avoid creating issues cross-compiling.
+      }
+
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+  ac_cv_x86_256_simd_flags="$_flags_256"
+else case e in #(
+  e) ac_cv_x86_256_simd_flags=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+
+CFLAGS=$save_CFLAGS
+CPPFLAGS=$save_CPPFLAGS
+LDFLAGS=$save_LDFLAGS
+LIBS=$save_LIBS
+
+
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_x86_256_simd_flags" >&5
+printf "%s\n" "$ac_cv_x86_256_simd_flags" >&6; }
+ ;;
+esac
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_x86_256_simd_flags" >&5
+printf "%s\n" "$ac_cv_x86_256_simd_flags" >&6; }
 
 ### end(simd intrinsics)
 
