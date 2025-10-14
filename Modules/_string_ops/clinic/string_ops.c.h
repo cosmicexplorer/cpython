@@ -8,19 +8,11 @@ preserve
 #endif
 #include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
 
-PyDoc_STRVAR(_string_ops_single_byte_matcher__doc__,
-"single_byte_matcher($module, /, byte)\n"
-"--\n"
-"\n");
-
-#define _STRING_OPS_SINGLE_BYTE_MATCHER_METHODDEF    \
-    {"single_byte_matcher", _PyCFunction_CAST(_string_ops_single_byte_matcher), METH_FASTCALL|METH_KEYWORDS, _string_ops_single_byte_matcher__doc__},
+static PyObject *
+_string_ops_STRINGOPS_ByteMatcher_impl(PyTypeObject *type, int byte);
 
 static PyObject *
-_string_ops_single_byte_matcher_impl(PyObject *module, int byte);
-
-static PyObject *
-_string_ops_single_byte_matcher(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+_string_ops_STRINGOPS_ByteMatcher(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 {
     PyObject *return_value = NULL;
     #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
@@ -46,25 +38,73 @@ _string_ops_single_byte_matcher(PyObject *module, PyObject *const *args, Py_ssiz
     static const char * const _keywords[] = {"byte", NULL};
     static _PyArg_Parser _parser = {
         .keywords = _keywords,
-        .fname = "single_byte_matcher",
+        .fname = "STRINGOPS_ByteMatcher",
         .kwtuple = KWTUPLE,
     };
     #undef KWTUPLE
     PyObject *argsbuf[1];
+    PyObject * const *fastargs;
+    Py_ssize_t nargs = PyTuple_GET_SIZE(args);
     int byte;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
+    fastargs = _PyArg_UnpackKeywords(_PyTuple_CAST(args)->ob_item, nargs, kwargs, NULL, &_parser,
             /*minpos*/ 1, /*maxpos*/ 1, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
-    if (!args) {
+    if (!fastargs) {
         goto exit;
     }
-    byte = PyLong_AsInt(args[0]);
+    byte = PyLong_AsInt(fastargs[0]);
     if (byte == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    return_value = _string_ops_single_byte_matcher_impl(module, byte);
+    return_value = _string_ops_STRINGOPS_ByteMatcher_impl(type, byte);
 
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=48368341f5e7aa35 input=a9049054013a1b77]*/
+
+PyDoc_STRVAR(_string_ops_STRINGOPS_SearchDirection_LEFT__doc__,
+"LEFT($type, /)\n"
+"--\n"
+"\n"
+"Begins matching at the end of the string and goes towards the beginning.");
+
+#define _STRING_OPS_STRINGOPS_SEARCHDIRECTION_LEFT_METHODDEF    \
+    {"LEFT", _PyCFunction_CAST(_string_ops_STRINGOPS_SearchDirection_LEFT), METH_METHOD|METH_FASTCALL|METH_KEYWORDS|METH_CLASS, _string_ops_STRINGOPS_SearchDirection_LEFT__doc__},
+
+static PyObject *
+_string_ops_STRINGOPS_SearchDirection_LEFT_impl(PyTypeObject *type,
+                                                PyTypeObject *cls);
+
+static PyObject *
+_string_ops_STRINGOPS_SearchDirection_LEFT(PyObject *type, PyTypeObject *cls, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    if (nargs || (kwnames && PyTuple_GET_SIZE(kwnames))) {
+        PyErr_SetString(PyExc_TypeError, "LEFT() takes no arguments");
+        return NULL;
+    }
+    return _string_ops_STRINGOPS_SearchDirection_LEFT_impl((PyTypeObject *)type, cls);
+}
+
+PyDoc_STRVAR(_string_ops_STRINGOPS_SearchDirection_RIGHT__doc__,
+"RIGHT($type, /)\n"
+"--\n"
+"\n"
+"Begins matching at the start of the string and goes towards the end.");
+
+#define _STRING_OPS_STRINGOPS_SEARCHDIRECTION_RIGHT_METHODDEF    \
+    {"RIGHT", _PyCFunction_CAST(_string_ops_STRINGOPS_SearchDirection_RIGHT), METH_METHOD|METH_FASTCALL|METH_KEYWORDS|METH_CLASS, _string_ops_STRINGOPS_SearchDirection_RIGHT__doc__},
+
+static PyObject *
+_string_ops_STRINGOPS_SearchDirection_RIGHT_impl(PyTypeObject *type,
+                                                 PyTypeObject *cls);
+
+static PyObject *
+_string_ops_STRINGOPS_SearchDirection_RIGHT(PyObject *type, PyTypeObject *cls, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    if (nargs || (kwnames && PyTuple_GET_SIZE(kwnames))) {
+        PyErr_SetString(PyExc_TypeError, "RIGHT() takes no arguments");
+        return NULL;
+    }
+    return _string_ops_STRINGOPS_SearchDirection_RIGHT_impl((PyTypeObject *)type, cls);
+}
+/*[clinic end generated code: output=1a546d3304691bc9 input=a9049054013a1b77]*/
