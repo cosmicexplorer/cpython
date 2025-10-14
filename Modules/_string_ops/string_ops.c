@@ -35,6 +35,7 @@ static stringopsmodulestate *get_string_ops_module_state(PyObject *m) {
 #define _MatchProgress_CAST(op) ((MatchProgress *)(op))
 
 /* clang-format off */
+
 /*[clinic input]
 module _string_ops
 class _string_ops.STRINGOPS_ByteMatcher "SingleByteMatcher *" "get_string_ops_module_state_by_class(tp)->SingleByteMatcher"
@@ -42,11 +43,14 @@ class _string_ops.STRINGOPS_SearchDirection "SearchDirection *" "get_string_ops_
 class _string_ops.STRINGOPS_MatchProgress "MatchProgress *" "get_string_ops_module_state_by_class(tp)->MatchProgress"
 [clinic start generated code]*/
 /*[clinic end generated code: output=da39a3ee5e6b4b0d input=7c9b7291970485e3]*/
+
 /* clang-format on */
+
+#include "clinic/string_ops.c.h"
 
 static PyObject *byte_matcher_repr(PyObject *self) {
   SingleByteMatcher *obj = _SingleByteMatcher_CAST(self);
-  return PyUnicode_FromFormat("string_ops.ByteMatcher(%d)", obj->to_match);
+  return PyUnicode_FromFormat("_string_ops.ByteMatcher(%d)", obj->to_match);
 }
 
 static Py_hash_t byte_matcher_hash(PyObject *op) {
@@ -88,9 +92,7 @@ static PyMemberDef byte_matcher_members[] = {
 };
 
 static PyMethodDef byte_matcher_methods[] = {
-  /* {"__new__", _string_ops_STRINGOPS_ByteMatcher}, */
-  {NULL, NULL}
-};
+    {NULL, NULL}};
 
 static PyType_Slot byte_matcher_slots[] = {
     {Py_tp_repr, byte_matcher_repr},
@@ -103,7 +105,7 @@ static PyType_Slot byte_matcher_slots[] = {
 };
 
 static PyType_Spec byte_matcher_spec = {
-    .name = "string_ops.ByteMatcher",
+    .name = "_string_ops.ByteMatcher",
     .basicsize = sizeof(SingleByteMatcher),
     .flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_IMMUTABLETYPE),
     .slots = byte_matcher_slots,
@@ -113,9 +115,11 @@ static PyObject *search_direction_repr(PyObject *self) {
   SearchDirection *obj = _SearchDirection_CAST(self);
   switch (obj->direction) {
   case LEFT:
-    return PyUnicode_FromString("string_ops.SearchDirection.LEFT");
+    return PyUnicode_FromString("_string_ops.SearchDirection.LEFT()");
   case RIGHT:
-    return PyUnicode_FromString("string_ops.SearchDirection.RIGHT");
+    return PyUnicode_FromString("_string_ops.SearchDirection.RIGHT()");
+  default:
+    abort();
   }
 }
 
@@ -123,9 +127,6 @@ static Py_hash_t search_direction_hash(PyObject *op) {
   SearchDirection *self = _SearchDirection_CAST(op);
   return self->direction;
 }
-
-PyDoc_STRVAR(search_direction_doc,
-             "Direction to begin a byte search in a string.");
 
 static PyObject *search_direction_richcompare(PyObject *lefto, PyObject *righto,
                                               int op) {
@@ -159,6 +160,9 @@ static PyMethodDef search_direction_methods[] = {
 };
 /* clang-format on */
 
+PyDoc_STRVAR(search_direction_doc,
+             "Direction to begin a byte search in a string.");
+
 static PyType_Slot search_direction_slots[] = {
     {Py_tp_repr, search_direction_repr},
     {Py_tp_hash, search_direction_hash},
@@ -169,14 +173,11 @@ static PyType_Slot search_direction_slots[] = {
 };
 
 static PyType_Spec search_direction_spec = {
-    .name = "string_ops.SearchDirection",
+    .name = "_string_ops.SearchDirection",
     .basicsize = sizeof(SearchDirection),
     .flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_IMMUTABLETYPE),
     .slots = search_direction_slots,
 };
-
-PyDoc_STRVAR(match_progress_doc, "State necessary to track the progress of "
-                                 "matching instances of a byte in a string.");
 
 static int match_progress_traverse(PyObject *op, visitproc visit, void *arg) {
   MatchProgress *self = _MatchProgress_CAST(op);
@@ -229,7 +230,7 @@ static int match_progress_set_direction(PyObject *op, PyObject *obj,
   if (obj == NULL || !Py_IS_TYPE(obj, module_state->SearchDirection)) {
     PyErr_SetString(
         PyExc_TypeError,
-        "direction must be set to a string_ops.SearchDirection object");
+        "direction must be set to a _string_ops.SearchDirection object");
     return -1;
   }
   Py_BEGIN_CRITICAL_SECTION(self);
@@ -269,6 +270,9 @@ static PyGetSetDef match_progress_getset[] = {
     {NULL} /* Sentinel */
 };
 
+PyDoc_STRVAR(match_progress_doc, "State necessary to track the progress of "
+                                 "matching instances of a byte in a string.");
+
 static PyType_Slot match_progress_slots[] = {
     {Py_tp_dealloc, match_progress_dealloc},
     /* {Py_tp_repr, match_progress_repr}, */
@@ -282,7 +286,7 @@ static PyType_Slot match_progress_slots[] = {
 };
 
 static PyType_Spec match_progress_spec = {
-    .name = "string_ops.MatchProgress",
+    .name = "_string_ops.MatchProgress",
     .basicsize = sizeof(MatchProgress),
     .flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_DISALLOW_INSTANTIATION |
               Py_TPFLAGS_HAVE_GC),
@@ -290,6 +294,7 @@ static PyType_Spec match_progress_spec = {
 };
 
 /* clang-format off */
+
 /*[clinic input]
 @classmethod
 _string_ops.STRINGOPS_ByteMatcher.__new__
@@ -302,6 +307,7 @@ static PyObject *
 _string_ops_STRINGOPS_ByteMatcher_impl(PyTypeObject *type, int byte)
 /*[clinic end generated code: output=4767a234e617d813 input=32e29ff947165716]*/
 {
+
   /* clang-format on */
   SingleByteMatcher *self = (SingleByteMatcher *)type->tp_alloc(type, 0);
   if (!self)
@@ -320,18 +326,15 @@ _string_ops_STRINGOPS_ByteMatcher_impl(PyTypeObject *type, int byte)
 @classmethod
 _string_ops.STRINGOPS_SearchDirection.LEFT
 
-    cls: defining_class
-
 Begins matching at the end of the string and goes towards the beginning.
 [clinic start generated code]*/
 
 static PyObject *
-_string_ops_STRINGOPS_SearchDirection_LEFT_impl(PyTypeObject *type,
-                                                PyTypeObject *cls)
-/*[clinic end generated code: output=de09fbd096f636dd input=4d7bac18d1c93445]*/
+_string_ops_STRINGOPS_SearchDirection_LEFT_impl(PyTypeObject *type)
+/*[clinic end generated code: output=580bac40431fda8d input=153aca64f0c902fc]*/
 {
   /* clang-format on */
-  SearchDirection *self = (SearchDirection *)cls->tp_alloc(cls, 0);
+  SearchDirection *self = (SearchDirection *)type->tp_alloc(type, 0);
   if (!self)
     return NULL;
   self->direction = LEFT;
@@ -348,18 +351,15 @@ _string_ops_STRINGOPS_SearchDirection_LEFT_impl(PyTypeObject *type,
 @classmethod
 _string_ops.STRINGOPS_SearchDirection.RIGHT
 
-    cls: defining_class
-
 Begins matching at the start of the string and goes towards the end.
 [clinic start generated code]*/
 
 static PyObject *
-_string_ops_STRINGOPS_SearchDirection_RIGHT_impl(PyTypeObject *type,
-                                                 PyTypeObject *cls)
-/*[clinic end generated code: output=0f76cad681a15000 input=6af86bca6fe050b4]*/
+_string_ops_STRINGOPS_SearchDirection_RIGHT_impl(PyTypeObject *type)
+/*[clinic end generated code: output=3d278fb39e1757c0 input=0905c04f110e4b0b]*/
 {
   /* clang-format on */
-  SearchDirection *self = (SearchDirection *)cls->tp_alloc(cls, 0);
+  SearchDirection *self = (SearchDirection *)type->tp_alloc(type, 0);
   if (!self)
     return NULL;
   self->direction = RIGHT;

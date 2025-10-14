@@ -69,20 +69,15 @@ PyDoc_STRVAR(_string_ops_STRINGOPS_SearchDirection_LEFT__doc__,
 "Begins matching at the end of the string and goes towards the beginning.");
 
 #define _STRING_OPS_STRINGOPS_SEARCHDIRECTION_LEFT_METHODDEF    \
-    {"LEFT", _PyCFunction_CAST(_string_ops_STRINGOPS_SearchDirection_LEFT), METH_METHOD|METH_FASTCALL|METH_KEYWORDS|METH_CLASS, _string_ops_STRINGOPS_SearchDirection_LEFT__doc__},
+    {"LEFT", (PyCFunction)_string_ops_STRINGOPS_SearchDirection_LEFT, METH_NOARGS|METH_CLASS, _string_ops_STRINGOPS_SearchDirection_LEFT__doc__},
 
 static PyObject *
-_string_ops_STRINGOPS_SearchDirection_LEFT_impl(PyTypeObject *type,
-                                                PyTypeObject *cls);
+_string_ops_STRINGOPS_SearchDirection_LEFT_impl(PyTypeObject *type);
 
 static PyObject *
-_string_ops_STRINGOPS_SearchDirection_LEFT(PyObject *type, PyTypeObject *cls, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+_string_ops_STRINGOPS_SearchDirection_LEFT(PyObject *type, PyObject *Py_UNUSED(ignored))
 {
-    if (nargs || (kwnames && PyTuple_GET_SIZE(kwnames))) {
-        PyErr_SetString(PyExc_TypeError, "LEFT() takes no arguments");
-        return NULL;
-    }
-    return _string_ops_STRINGOPS_SearchDirection_LEFT_impl((PyTypeObject *)type, cls);
+    return _string_ops_STRINGOPS_SearchDirection_LEFT_impl((PyTypeObject *)type);
 }
 
 PyDoc_STRVAR(_string_ops_STRINGOPS_SearchDirection_RIGHT__doc__,
@@ -92,19 +87,14 @@ PyDoc_STRVAR(_string_ops_STRINGOPS_SearchDirection_RIGHT__doc__,
 "Begins matching at the start of the string and goes towards the end.");
 
 #define _STRING_OPS_STRINGOPS_SEARCHDIRECTION_RIGHT_METHODDEF    \
-    {"RIGHT", _PyCFunction_CAST(_string_ops_STRINGOPS_SearchDirection_RIGHT), METH_METHOD|METH_FASTCALL|METH_KEYWORDS|METH_CLASS, _string_ops_STRINGOPS_SearchDirection_RIGHT__doc__},
+    {"RIGHT", (PyCFunction)_string_ops_STRINGOPS_SearchDirection_RIGHT, METH_NOARGS|METH_CLASS, _string_ops_STRINGOPS_SearchDirection_RIGHT__doc__},
 
 static PyObject *
-_string_ops_STRINGOPS_SearchDirection_RIGHT_impl(PyTypeObject *type,
-                                                 PyTypeObject *cls);
+_string_ops_STRINGOPS_SearchDirection_RIGHT_impl(PyTypeObject *type);
 
 static PyObject *
-_string_ops_STRINGOPS_SearchDirection_RIGHT(PyObject *type, PyTypeObject *cls, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+_string_ops_STRINGOPS_SearchDirection_RIGHT(PyObject *type, PyObject *Py_UNUSED(ignored))
 {
-    if (nargs || (kwnames && PyTuple_GET_SIZE(kwnames))) {
-        PyErr_SetString(PyExc_TypeError, "RIGHT() takes no arguments");
-        return NULL;
-    }
-    return _string_ops_STRINGOPS_SearchDirection_RIGHT_impl((PyTypeObject *)type, cls);
+    return _string_ops_STRINGOPS_SearchDirection_RIGHT_impl((PyTypeObject *)type);
 }
-/*[clinic end generated code: output=1a546d3304691bc9 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=3e66e2d3db00349f input=a9049054013a1b77]*/
