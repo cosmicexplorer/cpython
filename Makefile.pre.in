@@ -234,6 +234,9 @@ LIBHACL_LDFLAGS=@LIBHACL_LDFLAGS@
 LIBHACL_BLAKE2_SIMD128_CFLAGS=@LIBHACL_SIMD128_FLAGS@ -DHACL_CAN_COMPILE_VEC128
 LIBHACL_BLAKE2_SIMD256_CFLAGS=@LIBHACL_SIMD256_FLAGS@ -DHACL_CAN_COMPILE_VEC256
 
+# _string_ops build configuration
+STRING_OPS_CFLAGS=@STRING_OPS_SIMD128_FLAGS@ @STRING_OPS_SIMD256_FLAGS@
+
 # Module state, compiler flags and linker flags
 # Empty CFLAGS and LDFLAGS are omitted.
 # states:
@@ -1936,6 +1939,7 @@ Programs/_testembed.o: $(srcdir)/Programs/_testembed.c Programs/test_frozenmain.
 Modules/_sre/sre.o: $(srcdir)/Modules/_sre/sre.c $(srcdir)/Modules/_sre/sre.h $(srcdir)/Modules/_sre/sre_constants.h $(srcdir)/Modules/_sre/sre_lib.h
 
 Modules/_string_ops/string_ops.o: $(srcdir)/Modules/_string_ops/string_ops.c $(srcdir)/Modules/_string_ops/string_ops.h
+	$(CC) -c $(STRING_OPS_CFLAGS) -o $@ $(srcdir)/Modules/_string_ops/string_ops.c
 
 Modules/posixmodule.o: $(srcdir)/Modules/posixmodule.c $(srcdir)/Modules/posixmodule.h
 

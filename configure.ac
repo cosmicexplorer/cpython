@@ -8150,6 +8150,15 @@ AC_CACHE_CHECK([for 128-bit (x86-only) SIMD string operations], [ac_cv_x86_128_s
     [ac_cv_x86_128_simd_flags=no])
   ])
 ])
+AS_VAR_IF([ac_cv_x86_128_simd_flags],
+  [no], [], [
+    AC_SUBST([STRING_OPS_SIMD128_FLAGS], [$ac_cv_x86_128_simd_flags])
+    AC_DEFINE([STRING_OPS_CAN_COMPILE_VEC128], [1], [
+      _string_ops library can compile SIMD128 implementations.
+    ])
+  ]
+)
+
 
 AC_CACHE_CHECK([for 256-bit (x86-only) SIMD string operations], [ac_cv_x86_256_simd_flags], [
   _flags_256='-mavx2'
@@ -8173,6 +8182,15 @@ AC_CACHE_CHECK([for 256-bit (x86-only) SIMD string operations], [ac_cv_x86_256_s
     [ac_cv_x86_256_simd_flags=no])
   ])
 ])
+AS_VAR_IF([ac_cv_x86_256_simd_flags],
+  [no], [],
+  [
+    AC_SUBST([STRING_OPS_SIMD256_FLAGS], [$ac_cv_x86_256_simd_flags])
+    AC_DEFINE([STRING_OPS_CAN_COMPILE_VEC256], [1], [
+      _string_ops library can compile SIMD256 implementations.
+    ])
+  ]
+)
 
 ### end(simd intrinsics)
 

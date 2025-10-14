@@ -707,6 +707,8 @@ MODULE__CURSES_FALSE
 MODULE__CURSES_TRUE
 MODULE__CTYPES_FALSE
 MODULE__CTYPES_TRUE
+STRING_OPS_SIMD256_FLAGS
+STRING_OPS_SIMD128_FLAGS
 MODULE__HMAC_FALSE
 MODULE__HMAC_TRUE
 MODULE__BLAKE2_FALSE
@@ -33143,13 +33145,26 @@ LDFLAGS=$save_LDFLAGS
 LIBS=$save_LIBS
 
 
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_x86_128_simd_flags" >&5
-printf "%s\n" "$ac_cv_x86_128_simd_flags" >&6; }
  ;;
 esac
 fi
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_x86_128_simd_flags" >&5
 printf "%s\n" "$ac_cv_x86_128_simd_flags" >&6; }
+if test "x$ac_cv_x86_128_simd_flags" = xno
+then :
+
+else case e in #(
+  e)
+    STRING_OPS_SIMD128_FLAGS=$ac_cv_x86_128_simd_flags
+
+
+printf "%s\n" "#define STRING_OPS_CAN_COMPILE_VEC128 1" >>confdefs.h
+
+
+ ;;
+esac
+fi
+
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for 256-bit (x86-only) SIMD string operations" >&5
 printf %s "checking for 256-bit (x86-only) SIMD string operations... " >&6; }
@@ -33198,13 +33213,25 @@ LDFLAGS=$save_LDFLAGS
 LIBS=$save_LIBS
 
 
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_x86_256_simd_flags" >&5
-printf "%s\n" "$ac_cv_x86_256_simd_flags" >&6; }
  ;;
 esac
 fi
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_x86_256_simd_flags" >&5
 printf "%s\n" "$ac_cv_x86_256_simd_flags" >&6; }
+if test "x$ac_cv_x86_256_simd_flags" = xno
+then :
+
+else case e in #(
+  e)
+    STRING_OPS_SIMD256_FLAGS=$ac_cv_x86_256_simd_flags
+
+
+printf "%s\n" "#define STRING_OPS_CAN_COMPILE_VEC256 1" >>confdefs.h
+
+
+ ;;
+esac
+fi
 
 ### end(simd intrinsics)
 

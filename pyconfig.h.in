@@ -1848,6 +1848,12 @@
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
 
+/* _string_ops library can compile SIMD128 implementations. */
+#undef STRING_OPS_CAN_COMPILE_VEC128
+
+/* _string_ops library can compile SIMD256 implementations. */
+#undef STRING_OPS_CAN_COMPILE_VEC256
+
 /* Define if you can safely include both <sys/select.h> and <sys/time.h>
    (which you can't on SCO ODT 3.0). */
 #undef SYS_SELECT_WITH_SYS_TIME
