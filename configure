@@ -707,6 +707,8 @@ MODULE__CURSES_FALSE
 MODULE__CURSES_TRUE
 MODULE__CTYPES_FALSE
 MODULE__CTYPES_TRUE
+MODULE__STRING_OPS_FALSE
+MODULE__STRING_OPS_TRUE
 STRING_OPS_SIMD256_FLAGS
 STRING_OPS_SIMD128_FLAGS
 MODULE__HMAC_FALSE
@@ -33233,6 +33235,47 @@ printf "%s\n" "#define STRING_OPS_CAN_COMPILE_VEC256 1" >>confdefs.h
 esac
 fi
 
+
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for stdlib extension module _string_ops" >&5
+printf %s "checking for stdlib extension module _string_ops... " >&6; }
+        if test "$py_cv_module__string_ops" != "n/a"
+then :
+
+    if true
+then :
+  if true
+then :
+  py_cv_module__string_ops=yes
+else case e in #(
+  e) py_cv_module__string_ops=missing ;;
+esac
+fi
+else case e in #(
+  e) py_cv_module__string_ops=disabled ;;
+esac
+fi
+
+fi
+  as_fn_append MODULE_BLOCK "MODULE__STRING_OPS_STATE=$py_cv_module__string_ops$as_nl"
+  if test "x$py_cv_module__string_ops" = xyes
+then :
+
+    as_fn_append MODULE_BLOCK "MODULE__STRING_OPS_CFLAGS=$STRING_OPS_SIMD128_FLAGS $STRING_OPS_SIMD256_FLAGS$as_nl"
+
+
+fi
+   if test "$py_cv_module__string_ops" = yes; then
+  MODULE__STRING_OPS_TRUE=
+  MODULE__STRING_OPS_FALSE='#'
+else
+  MODULE__STRING_OPS_TRUE='#'
+  MODULE__STRING_OPS_FALSE=
+fi
+
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $py_cv_module__string_ops" >&5
+printf "%s\n" "$py_cv_module__string_ops" >&6; }
+
+
 ### end(simd intrinsics)
 
 
@@ -34841,6 +34884,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${MODULE__HMAC_TRUE}" && test -z "${MODULE__HMAC_FALSE}"; then
   as_fn_error $? "conditional \"MODULE__HMAC\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${MODULE__STRING_OPS_TRUE}" && test -z "${MODULE__STRING_OPS_FALSE}"; then
+  as_fn_error $? "conditional \"MODULE__STRING_OPS\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${MODULE__CTYPES_TRUE}" && test -z "${MODULE__CTYPES_FALSE}"; then

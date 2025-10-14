@@ -8192,6 +8192,14 @@ AS_VAR_IF([ac_cv_x86_256_simd_flags],
   ]
 )
 
+dnl stdlib modules are configured here instead of hacking them directly into the Makefile, so that
+dnl they can be selectively ignored with other args to the configure script.
+PY_STDLIB_MOD([_string_ops],
+  [], [],
+  [$STRING_OPS_SIMD128_FLAGS $STRING_OPS_SIMD256_FLAGS],
+  [],
+)
+
 ### end(simd intrinsics)
 
 PY_STDLIB_MOD([_ctypes],
