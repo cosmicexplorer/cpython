@@ -4,25 +4,20 @@
 
 /* TODO: use PyBytesWriter for text replacement! */
 
-#include "Python.h"
-#include "pycore_long.h"          // _PyLong_GetZero()
-#include "pycore_moduleobject.h"  // _PyModule_GetState()
-#include "pycore_object.h"        // _PyObject_XSetRefDelayed()
-#include "pycore_unicodeobject.h" // _PyUnicode_Copy()
+static const char copyright[] = "NO LICENSE IS AVAILABLE";
 
-#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#include "pycore_gc.h"      // PyGC_Head
-#include "pycore_runtime.h" // _Py_ID()
-#endif
-#include "pycore_modsupport.h" // _PyArg_UnpackKeywords()
+#include "Python.h"
+#include "pycore_moduleobject.h" // _PyModule_GetState()
+#include "pycore_object.h"       // _PyObject_XSetRefDelayed()
 
 #include "string_ops.h"
 
 static struct PyModuleDef stringopsmodule;
 
-/* module state */
+/* There are links back to the module from each type too, so pointer chasing can
+   all be done synchronously. */
 typedef struct {
-  PyTypeObject *SingleByteMatcher;
+  PyTypeObject *ByteMatcher;
   PyTypeObject *SearchDirection;
   PyTypeObject *MatchProgress;
 } stringopsmodulestate;
@@ -36,7 +31,7 @@ static stringopsmodulestate *get_string_ops_module_state(PyObject *m) {
 #define _string_ops_get_state_by_class(cls)                                    \
   get_string_ops_module_state(PyType_GetModule(cls))
 
-#define _SingleByteMatcher_CAST(op) ((SingleByteMatcher *)(op))
+#define _ByteMatcher_CAST(op) ((ByteMatcher *)(op))
 #define _SearchDirection_CAST(op) ((SearchDirection *)(op))
 #define _MatchProgress_CAST(op) ((MatchProgress *)(op))
 
@@ -67,8 +62,7 @@ static PyObject *_string_ops_STRINGOPS_ByteMatcher(PyTypeObject *subtype,
   }
 
   assert(len == 1);
-  SingleByteMatcher *self =
-      _SingleByteMatcher_CAST(subtype->tp_alloc(subtype, 0));
+  ByteMatcher *self = _ByteMatcher_CAST(subtype->tp_alloc(subtype, 0));
   if (!self) {
     return NULL;
   }
@@ -93,12 +87,12 @@ static PyObject *_string_ops_STRINGOPS_ByteMatcher(PyTypeObject *subtype,
 }
 
 static PyObject *byte_matcher_repr(PyObject *self) {
-  SingleByteMatcher *obj = _SingleByteMatcher_CAST(self);
+  ByteMatcher *obj = _ByteMatcher_CAST(self);
   return PyUnicode_FromFormat("ByteMatcher(%d)", obj->to_match);
 }
 
 static Py_hash_t byte_matcher_hash(PyObject *op) {
-  SingleByteMatcher *self = _SingleByteMatcher_CAST(op);
+  ByteMatcher *self = _ByteMatcher_CAST(op);
   return self->to_match;
 }
 
@@ -106,17 +100,17 @@ static PyObject *byte_matcher_richcompare(PyObject *lefto, PyObject *righto,
                                           int op) {
   PyTypeObject *tp = Py_TYPE(lefto);
   stringopsmodulestate *module_state = _string_ops_get_state_by_class(tp);
-  SingleByteMatcher *left, *right;
+  ByteMatcher *left, *right;
 
-  if (!Py_IS_TYPE(righto, module_state->SingleByteMatcher)) {
+  if (!Py_IS_TYPE(righto, module_state->ByteMatcher)) {
     Py_RETURN_NOTIMPLEMENTED;
   }
   if (lefto == righto) {
     /* `is` relationship implies equality. */
     return PyBool_FromLong(op == Py_EQ);
   }
-  left = _SingleByteMatcher_CAST(lefto);
-  right = _SingleByteMatcher_CAST(righto);
+  left = _ByteMatcher_CAST(lefto);
+  right = _ByteMatcher_CAST(righto);
 
   switch (op) {
   case Py_EQ:
@@ -136,17 +130,19 @@ static PyObject *byte_matcher_richcompare(PyObject *lefto, PyObject *righto,
   }
 }
 
-#define BYTE_MATCHER_OFF(x) offsetof(SingleByteMatcher, x)
+/* clang-format off */
+#define BYTE_MATCHER_OFF(x) offsetof(ByteMatcher, x)
 static PyMemberDef byte_matcher_members[] = {
     {"to_match", Py_T_BYTE, BYTE_MATCHER_OFF(to_match), Py_READONLY,
      "The numeric value of the byte this object matches against."},
-    {NULL} /* Sentinel */
+    {NULL}
 };
+/* clang-format on */
 
 /* clang-format off */
 static PyTypeObject ByteMatcherType = {
   PyObject_HEAD_INIT(NULL)
-  .tp_basicsize = sizeof(SingleByteMatcher),
+  .tp_basicsize = sizeof(ByteMatcher),
   .tp_new = _string_ops_STRINGOPS_ByteMatcher,
   .tp_name = "_string_ops.ByteMatcher",
   .tp_doc = PyDoc_STR("ByteMatcher(byte, /)\n"
@@ -166,7 +162,7 @@ static PyObject *search_direction_base_new(PyTypeObject *subtype,
 
   assert(kwargs == NULL || PyDict_Check(kwargs));
   if (kwargs != NULL && PyDict_GET_SIZE(kwargs)) {
-    const char *msg = "SearchDirection() does not accept kwargs";
+    const char *msg = "_SearchDirection() does not accept kwargs";
     PyErr_Format(PyExc_TypeError, msg);
     return NULL;
   }
@@ -212,13 +208,13 @@ static PyObject *search_direction_base_new(PyTypeObject *subtype,
   return (PyObject *)self;
 }
 
-static PyObject *search_direction_repr(PyObject *self) {
+static PyObject *search_direction_str(PyObject *self) {
   SearchDirection *obj = _SearchDirection_CAST(self);
   switch (obj->direction) {
   case LEFT:
-    return PyUnicode_FromString("SearchDirection.LEFT");
+    return PyUnicode_FromString("_SearchDirection<LEFT>");
   case RIGHT:
-    return PyUnicode_FromString("SearchDirection.RIGHT");
+    return PyUnicode_FromString("_SearchDirection<RIGHT>");
   default:
     abort();
   }
@@ -259,12 +255,12 @@ static PyTypeObject SearchDirectionType = {
   .tp_basicsize = sizeof(SearchDirection),
   .tp_new = search_direction_base_new,
   .tp_name = "_string_ops._SearchDirection",
-  .tp_doc = PyDoc_STR("SearchDirection\n"
+  .tp_doc = PyDoc_STR("_SearchDirection\n"
              "--\n"
              "\n"
              "Direction to begin a byte search in a string."),
   .tp_flags = Py_TPFLAGS_BASETYPE,
-  .tp_repr = search_direction_repr,
+  .tp_str = search_direction_str,
   .tp_hash = search_direction_hash,
   .tp_richcompare = search_direction_richcompare,
 };
@@ -273,7 +269,7 @@ static PyTypeObject SearchDirectionType = {
 static int match_progress_traverse(PyObject *op, visitproc visit, void *arg) {
   MatchProgress *self = _MatchProgress_CAST(op);
   Py_VISIT(Py_TYPE(self));
-  Py_VISIT(self->string);
+  Py_VISIT(self->data_block);
   Py_VISIT(self->direction);
   Py_VISIT(self->matcher);
   return 0;
@@ -281,7 +277,7 @@ static int match_progress_traverse(PyObject *op, visitproc visit, void *arg) {
 
 static int match_progress_clear(PyObject *op) {
   MatchProgress *self = _MatchProgress_CAST(op);
-  Py_CLEAR(self->string);
+  Py_CLEAR(self->data_block);
   Py_CLEAR(self->direction);
   Py_CLEAR(self->matcher);
   return 0;
@@ -295,17 +291,19 @@ static void match_progress_dealloc(PyObject *self) {
   Py_DECREF(tp);
 }
 
+/* clang-format off */
 #define MATCH_OFF(x) offsetof(MatchProgress, x)
 static PyMemberDef match_progress_members[] = {
-    {"string", Py_T_STRING, MATCH_OFF(string), Py_READONLY,
+    {"data_block", Py_T_STRING, MATCH_OFF(data_block), Py_READONLY,
      "The target string data on which this byte matcher is being applied."},
     {"cur_pos", Py_T_INT, MATCH_OFF(cur_pos), Py_READONLY,
      "The position in the string at which the byte last matched. "
      "This will be -1 if it has not been attempted to be matched yet, "
      "or 1 past the end of the string if all matches have been found. "
      "This will be reversed for LEFT direction searches."},
-    {NULL} /* Sentinel. */
+    {NULL}
 };
+/* clang-format on */
 
 static PyObject *match_progress_get_direction(PyObject *op,
                                               void *Py_UNUSED(ignored)) {
@@ -341,10 +339,9 @@ static int match_progress_set_matcher(PyObject *op, PyObject *obj,
   PyTypeObject *tp = Py_TYPE(op);
   stringopsmodulestate *module_state = _string_ops_get_state_by_class(tp);
   MatchProgress *self = _MatchProgress_CAST(op);
-  if (obj == NULL || !Py_IS_TYPE(obj, module_state->SingleByteMatcher)) {
-    PyErr_SetString(
-        PyExc_TypeError,
-        "matcher must be set to a _string_ops.SingleByteMatcher object");
+  if (obj == NULL || !Py_IS_TYPE(obj, module_state->ByteMatcher)) {
+    PyErr_SetString(PyExc_TypeError,
+                    "matcher must be set to a _string_ops.ByteMatcher object");
     return -1;
   }
   Py_BEGIN_CRITICAL_SECTION(self);
@@ -395,14 +392,18 @@ static int string_ops_exec(PyObject *m) {
 
   state = get_string_ops_module_state(m);
 
-  state->SingleByteMatcher = &ByteMatcherType;
+  state->ByteMatcher = &ByteMatcherType;
   state->SearchDirection = &SearchDirectionType;
   state->MatchProgress = &MatchProgressType;
 
-  ADD_TYPE(m, state->SingleByteMatcher);
+  ADD_TYPE(m, state->ByteMatcher);
   ADD_TYPE(m, state->SearchDirection);
 
   if (PyModule_AddIntConstant(m, "MAGIC", 777) < 0) {
+    goto error;
+  }
+
+  if (PyModule_AddStringConstant(m, "copyright", copyright) < 0) {
     goto error;
   }
 
@@ -421,7 +422,7 @@ static PyModuleDef_Slot string_ops_slots[] = {
 
 static int stringopsmodule_traverse(PyObject *m, visitproc visit, void *arg) {
   stringopsmodulestate *state = get_string_ops_module_state(m);
-  Py_VISIT(state->SingleByteMatcher);
+  Py_VISIT(state->ByteMatcher);
   Py_VISIT(state->SearchDirection);
   Py_VISIT(state->MatchProgress);
   return 0;
@@ -429,7 +430,7 @@ static int stringopsmodule_traverse(PyObject *m, visitproc visit, void *arg) {
 
 static int stringopsmodule_clear(PyObject *m) {
   stringopsmodulestate *state = get_string_ops_module_state(m);
-  Py_CLEAR(state->SingleByteMatcher);
+  Py_CLEAR(state->ByteMatcher);
   Py_CLEAR(state->SearchDirection);
   Py_CLEAR(state->MatchProgress);
   return 0;
@@ -443,6 +444,7 @@ static struct PyModuleDef stringopsmodule = {
     .m_base = PyModuleDef_HEAD_INIT,
     .m_name = "_string_ops",
     .m_size = sizeof(stringopsmodulestate),
+    .m_doc = PyDoc_STR("Byte-level searching and matching operations."),
     .m_methods = stringops_functions,
     .m_slots = string_ops_slots,
     .m_traverse = stringopsmodule_traverse,

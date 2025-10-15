@@ -8,7 +8,7 @@
 typedef struct {
   PyObject_HEAD
   unsigned char to_match;
-} SingleByteMatcher;
+} ByteMatcher;
 
 typedef enum {
   LEFT = 0,
@@ -22,7 +22,7 @@ typedef struct {
 
 typedef struct {
   PyObject_HEAD
-  PyObject* string;
+  PyObject* data_block;
   Py_ssize_t cur_pos;
   PyObject* direction;
   PyObject* matcher;
