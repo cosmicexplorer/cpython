@@ -2,10 +2,15 @@
  * NO LICENSE IS AVAILABLE YET
  */
 
-#ifndef STRING_OPS_LIB_INCLUDED
-#define STRING_OPS_LIB_INCLUDED
+#ifndef STRING_OPS_SIMD_INCLUDED
+#define STRING_OPS_SIMD_INCLUDED
+
+typedef enum {
+  UNSTABLE = 0,
+} MatcherVersion;
 
 typedef struct {
+  MatcherVersion version;
   unsigned char to_match;
 } CompiledMatcher;
 
@@ -81,4 +86,5 @@ typedef struct {
 /* Iterate the coroutine! */
 SingleMatchResult single_string_match(const SingleMatchRequest &req,
                                       CompiledMatcher &matcher);
-#endif /* STRING_OPS_LIB_INCLUDED */
+
+#endif /* STRING_OPS_SIMD_INCLUDED */
