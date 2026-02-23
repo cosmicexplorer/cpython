@@ -673,6 +673,9 @@ MODULE__TESTCLINIC_FALSE
 MODULE__TESTCLINIC_TRUE
 MODULE__TESTCAPI_FALSE
 MODULE__TESTCAPI_TRUE
+PY_INTERNAL_SIMD_MODULES
+PY_INTERNAL_SIMD_CFLAGS_ARG
+PY_INTERNAL_SIMD_CFLAGS
 MODULE__HASHLIB_FALSE
 MODULE__HASHLIB_TRUE
 MODULE__SSL_FALSE
@@ -4092,6 +4095,9 @@ printf "%s\n" "yes" >&6; }
 printf "%s\n" "no" >&6; }
 		PKG_CONFIG=""
 	fi
+fi
+if test -z "$PKG_CONFIG"; then
+	as_fn_error $? "pkg-config not found" "$LINENO" 5
 fi
    ;; #(
   no) :
@@ -8463,15 +8469,18 @@ printf "%s\n" "$as_me: WARNING: CFLAGS contains -O0 which may conflict with --en
   if test "x$ac_cv_gcc_compat" = xyes
 then :
 
-      { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -fno-semantic-interposition" >&5
-printf %s "checking whether C compiler accepts -fno-semantic-interposition... " >&6; }
+      { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -fno-semantic-interposition" >&5
+printf %s "checking whether the C compiler accepts -fno-semantic-interposition... " >&6; }
 if test ${ax_cv_check_cflags__Werror__fno_semantic_interposition+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -fno-semantic-interposition"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS -Werror -fno-semantic-interposition $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -8601,15 +8610,18 @@ if test "$Py_LTO" = 'true' ; then
   case $ac_cv_cc_name in
     clang)
       LDFLAGS_NOLTO="-fno-lto"
-                  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -flto=thin" >&5
-printf %s "checking whether C compiler accepts -flto=thin... " >&6; }
+                  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -flto=thin" >&5
+printf %s "checking whether the C compiler accepts -flto=thin... " >&6; }
 if test ${ax_cv_check_cflags___flto_thin+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS  -flto=thin"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS  -flto=thin $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -8786,15 +8798,18 @@ printf "%s\n" "$as_me: llvm-ar found via xcrun: ${LLVM_AR}" >&6;}
           if test $Py_LTO_POLICY = default
           then
             # Check that ThinLTO is accepted.
-            { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -flto=thin" >&5
-printf %s "checking whether C compiler accepts -flto=thin... " >&6; }
+            { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -flto=thin" >&5
+printf %s "checking whether the C compiler accepts -flto=thin... " >&6; }
 if test ${ax_cv_check_cflags___flto_thin+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS  -flto=thin"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS  -flto=thin $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -8843,15 +8858,18 @@ fi
           if test $Py_LTO_POLICY = default
           then
             # Check that ThinLTO is accepted
-            { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -flto=thin" >&5
-printf %s "checking whether C compiler accepts -flto=thin... " >&6; }
+            { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -flto=thin" >&5
+printf %s "checking whether the C compiler accepts -flto=thin... " >&6; }
 if test ${ax_cv_check_cflags___flto_thin+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS  -flto=thin"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS  -flto=thin $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -9128,15 +9146,18 @@ if test "$Py_BOLT" = 'true' ; then
 
   # -fno-reorder-blocks-and-partition is required for bolt to work.
   # Possibly GCC only.
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -fno-reorder-blocks-and-partition" >&5
-printf %s "checking whether C compiler accepts -fno-reorder-blocks-and-partition... " >&6; }
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -fno-reorder-blocks-and-partition" >&5
+printf %s "checking whether the C compiler accepts -fno-reorder-blocks-and-partition... " >&6; }
 if test ${ax_cv_check_cflags___fno_reorder_blocks_and_partition+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS  -fno-reorder-blocks-and-partition"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS  -fno-reorder-blocks-and-partition $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -9785,15 +9806,18 @@ printf "%s\n" "$enable_safety" >&6; }
 
 if test "$enable_safety" = "yes"
 then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -fstack-protector-strong" >&5
-printf %s "checking whether C compiler accepts -fstack-protector-strong... " >&6; }
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -fstack-protector-strong" >&5
+printf %s "checking whether the C compiler accepts -fstack-protector-strong... " >&6; }
 if test ${ax_cv_check_cflags__Werror__fstack_protector_strong+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -fstack-protector-strong"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS -Werror -fstack-protector-strong $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -9827,15 +9851,18 @@ printf "%s\n" "$as_me: WARNING: -fstack-protector-strong not supported" >&2;} ;;
 esac
 fi
 
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -Wtrampolines" >&5
-printf %s "checking whether C compiler accepts -Wtrampolines... " >&6; }
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -Wtrampolines" >&5
+printf %s "checking whether the C compiler accepts -Wtrampolines... " >&6; }
 if test ${ax_cv_check_cflags__Werror__Wtrampolines+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -Wtrampolines"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS -Werror -Wtrampolines $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -9869,15 +9896,18 @@ printf "%s\n" "$as_me: WARNING: -Wtrampolines not supported" >&2;} ;;
 esac
 fi
 
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -Wimplicit-fallthrough" >&5
-printf %s "checking whether C compiler accepts -Wimplicit-fallthrough... " >&6; }
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -Wimplicit-fallthrough" >&5
+printf %s "checking whether the C compiler accepts -Wimplicit-fallthrough... " >&6; }
 if test ${ax_cv_check_cflags__Werror__Wimplicit_fallthrough+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -Wimplicit-fallthrough"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS -Werror -Wimplicit-fallthrough $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -9911,15 +9941,18 @@ printf "%s\n" "$as_me: WARNING: -Wimplicit-fallthrough not supported" >&2;} ;;
 esac
 fi
 
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -Werror=format-security" >&5
-printf %s "checking whether C compiler accepts -Werror=format-security... " >&6; }
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -Werror=format-security" >&5
+printf %s "checking whether the C compiler accepts -Werror=format-security... " >&6; }
 if test ${ax_cv_check_cflags__Werror__Werror_format_security+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -Werror=format-security"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS -Werror -Werror=format-security $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -9953,15 +9986,18 @@ printf "%s\n" "$as_me: WARNING: -Werror=format-security not supported" >&2;} ;;
 esac
 fi
 
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -Wbidi-chars=any" >&5
-printf %s "checking whether C compiler accepts -Wbidi-chars=any... " >&6; }
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -Wbidi-chars=any" >&5
+printf %s "checking whether the C compiler accepts -Wbidi-chars=any... " >&6; }
 if test ${ax_cv_check_cflags__Werror__Wbidi_chars_any+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -Wbidi-chars=any"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS -Werror -Wbidi-chars=any $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -9995,15 +10031,18 @@ printf "%s\n" "$as_me: WARNING: -Wbidi-chars=any not supported" >&2;} ;;
 esac
 fi
 
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -Wall" >&5
-printf %s "checking whether C compiler accepts -Wall... " >&6; }
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -Wall" >&5
+printf %s "checking whether the C compiler accepts -Wall... " >&6; }
 if test ${ax_cv_check_cflags__Werror__Wall+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -Wall"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS -Werror -Wall $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -10061,15 +10100,18 @@ printf "%s\n" "$enable_slower_safety" >&6; }
 
 if test "$enable_slower_safety" = "yes"
 then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -D_FORTIFY_SOURCE=3" >&5
-printf %s "checking whether C compiler accepts -D_FORTIFY_SOURCE=3... " >&6; }
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -D_FORTIFY_SOURCE=3" >&5
+printf %s "checking whether the C compiler accepts -D_FORTIFY_SOURCE=3... " >&6; }
 if test ${ax_cv_check_cflags__Werror__D_FORTIFY_SOURCE_3+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -D_FORTIFY_SOURCE=3"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS -Werror -D_FORTIFY_SOURCE=3 $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -10670,15 +10712,18 @@ printf "%s\n" "$CC" >&6; }
 
         # Error on unguarded use of new symbols, which will fail at runtime for
         # users on older versions of macOS
-        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -Wunguarded-availability" >&5
-printf %s "checking whether C compiler accepts -Wunguarded-availability... " >&6; }
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -Wunguarded-availability" >&5
+printf %s "checking whether the C compiler accepts -Wunguarded-availability... " >&6; }
 if test ${ax_cv_check_cflags__Werror__Wunguarded_availability+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -Wunguarded-availability"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS -Werror -Wunguarded-availability $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -13423,15 +13468,18 @@ then :
   withval=$with_memory_sanitizer;
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $withval" >&5
 printf "%s\n" "$withval" >&6; }
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -fsanitize=memory" >&5
-printf %s "checking whether C compiler accepts -fsanitize=memory... " >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -fsanitize=memory" >&5
+printf %s "checking whether the C compiler accepts -fsanitize=memory... " >&6; }
 if test ${ax_cv_check_cflags___fsanitize_memory+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS  -fsanitize=memory"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS  -fsanitize=memory $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -26104,10 +26152,10 @@ if ac_fn_c_try_link "$LINENO"
 then :
 
 
-if grep noonsees conftest* > /dev/null ; then
+if grep noonsees conftest$EXEEXT >/dev/null ; then
   ax_cv_c_float_words_bigendian=yes
 fi
-if grep seesnoon conftest* >/dev/null ; then
+if grep seesnoon conftest$EXEEXT >/dev/null ; then
   if test "$ax_cv_c_float_words_bigendian" = unknown; then
     ax_cv_c_float_words_bigendian=no
   else
@@ -32755,15 +32803,18 @@ fi
 if test "$ac_sys_system" != "Linux-android" -a "$ac_sys_system" != "WASI" || \
    { test -n "$ANDROID_API_LEVEL" && test "$ANDROID_API_LEVEL" -ge 28; }
 then
-    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -msse -msse2 -msse3 -msse4.1 -msse4.2" >&5
-printf %s "checking whether C compiler accepts -msse -msse2 -msse3 -msse4.1 -msse4.2... " >&6; }
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -msse -msse2 -msse3 -msse4.1 -msse4.2" >&5
+printf %s "checking whether the C compiler accepts -msse -msse2 -msse3 -msse4.1 -msse4.2... " >&6; }
 if test ${ax_cv_check_cflags__Werror__msse__msse2__msse3__msse4_1__msse4_2+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -msse -msse2 -msse3 -msse4.1 -msse4.2"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS -Werror -msse -msse2 -msse3 -msse4.1 -msse4.2 $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -32832,15 +32883,18 @@ fi
 if test "$ac_sys_system" != "Linux-android" -a "$ac_sys_system" != "WASI" || \
    { test -n "$ANDROID_API_LEVEL" && test "$ANDROID_API_LEVEL" -ge 28; }
 then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -mavx2" >&5
-printf %s "checking whether C compiler accepts -mavx2... " >&6; }
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts -mavx2" >&5
+printf %s "checking whether the C compiler accepts -mavx2... " >&6; }
 if test ${ax_cv_check_cflags__Werror__mavx2+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
   e)
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -mavx2"
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS -Werror -mavx2 $add_gnu_werror"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -33870,6 +33924,368 @@ fi
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $py_cv_module__hashlib" >&5
 printf "%s\n" "$py_cv_module__hashlib" >&6; }
 
+
+
+
+
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for simd flags, types, and functions" >&5
+printf %s "checking for simd flags, types, and functions... " >&6; }
+if test ${ac_cv_py_inner_simd+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e)
+echo
+case $host in #(
+  *-*-emscripten|*-*-wasi*|wasm32-*-*|wasm64-*-*) :
+
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for SIMD-compatible flag for host $host" >&5
+printf %s "checking for SIMD-compatible flag for host $host... " >&6; }
+    _PY_SIMD_WASM_FLAG=-msimd128
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $_PY_SIMD_WASM_FLAG" >&5
+printf "%s\n" "$_PY_SIMD_WASM_FLAG" >&6; }
+    as_CACHEVAR=`printf "%s\n" "ax_cv_check_cflags__$_PY_SIMD_WASM_FLAG" | sed "$as_sed_sh"`
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts $_PY_SIMD_WASM_FLAG" >&5
+printf %s "checking whether the C compiler accepts $_PY_SIMD_WASM_FLAG... " >&6; }
+if eval test \${$as_CACHEVAR+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e)
+  ax_check_save_flags=$CFLAGS
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS  $_PY_SIMD_WASM_FLAG $add_gnu_werror"
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main (void)
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+  eval "$as_CACHEVAR=yes"
+else case e in #(
+  e) eval "$as_CACHEVAR=no" ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+  CFLAGS=$ax_check_save_flags ;;
+esac
+fi
+eval ac_res=\$$as_CACHEVAR
+	       { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
+printf "%s\n" "$ac_res" >&6; }
+if eval test \"x\$"$as_CACHEVAR"\" = x"yes"
+then :
+
+      save_CFLAGS=$CFLAGS
+save_CPPFLAGS=$CPPFLAGS
+save_LDFLAGS=$LDFLAGS
+save_LIBS=$LIBS
+
+
+        CFLAGS="$CFLAGS $_PY_SIMD_WASM_FLAG"
+        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main (void)
+{
+
+/* 128-bit vector of 16 unsigned bytes */
+typedef unsigned char v16u8 __attribute__((vector_size(16)));
+/* 128-bit vector of 16 signed bytes */
+typedef signed char v16s8 __attribute__((vector_size(16)));
+
+v16u8 arg1 = {1, 1, 1, 1, 1, 1, 1, 1};
+v16u8 arg2 = {2, 2, 2, 2, 2, 2, 2, 2};
+v16u8 hi = (v16u8)((v16s8)arg1 > arg2);
+v16u8 lo = (v16u8)((v16s8)arg2 > arg1);
+
+v16u8 result0 = __builtin_shufflevector(hi, lo,
+  0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23);
+v16u8 result1 = __builtin_shufflevector(hi, lo,
+  8, 24, 9, 25, 10, 26, 11, 27, 12, 28, 13, 29, 14, 30, 15, 31);
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+  ac_cv_py_inner_simd="$_PY_SIMD_WASM_FLAG"
+else case e in #(
+  e) ac_cv_py_inner_simd=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+
+CFLAGS=$save_CFLAGS
+CPPFLAGS=$save_CPPFLAGS
+LDFLAGS=$save_LDFLAGS
+LIBS=$save_LIBS
+
+
+
+else case e in #(
+  e) ac_cv_py_inner_simd=no ;;
+esac
+fi
+
+    unset _PY_SIMD_WASM_FLAG
+   ;; #(
+  x86*) :
+
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for SIMD-compatible flag for host cpu $host_cpu" >&5
+printf %s "checking for SIMD-compatible flag for host cpu $host_cpu... " >&6; }
+    _PY_SIMD_X86_FLAG=-msse2
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $_PY_SIMD_X86_FLAG" >&5
+printf "%s\n" "$_PY_SIMD_X86_FLAG" >&6; }
+    as_CACHEVAR=`printf "%s\n" "ax_cv_check_cflags__$_PY_SIMD_X86_FLAG" | sed "$as_sed_sh"`
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts $_PY_SIMD_X86_FLAG" >&5
+printf %s "checking whether the C compiler accepts $_PY_SIMD_X86_FLAG... " >&6; }
+if eval test \${$as_CACHEVAR+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e)
+  ax_check_save_flags=$CFLAGS
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS  $_PY_SIMD_X86_FLAG $add_gnu_werror"
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main (void)
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+  eval "$as_CACHEVAR=yes"
+else case e in #(
+  e) eval "$as_CACHEVAR=no" ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+  CFLAGS=$ax_check_save_flags ;;
+esac
+fi
+eval ac_res=\$$as_CACHEVAR
+	       { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
+printf "%s\n" "$ac_res" >&6; }
+if eval test \"x\$"$as_CACHEVAR"\" = x"yes"
+then :
+
+      save_CFLAGS=$CFLAGS
+save_CPPFLAGS=$CPPFLAGS
+save_LDFLAGS=$LDFLAGS
+save_LIBS=$LIBS
+
+
+        CFLAGS="$CFLAGS $_PY_SIMD_X86_FLAG"
+        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main (void)
+{
+
+/* 128-bit vector of 16 unsigned bytes */
+typedef unsigned char v16u8 __attribute__((vector_size(16)));
+/* 128-bit vector of 16 signed bytes */
+typedef signed char v16s8 __attribute__((vector_size(16)));
+
+v16u8 arg1 = {1, 1, 1, 1, 1, 1, 1, 1};
+v16u8 arg2 = {2, 2, 2, 2, 2, 2, 2, 2};
+v16u8 hi = (v16u8)((v16s8)arg1 > arg2);
+v16u8 lo = (v16u8)((v16s8)arg2 > arg1);
+
+v16u8 result0 = __builtin_shufflevector(hi, lo,
+  0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23);
+v16u8 result1 = __builtin_shufflevector(hi, lo,
+  8, 24, 9, 25, 10, 26, 11, 27, 12, 28, 13, 29, 14, 30, 15, 31);
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+  ac_cv_py_inner_simd="$_PY_SIMD_X86_FLAG"
+else case e in #(
+  e) ac_cv_py_inner_simd=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+
+CFLAGS=$save_CFLAGS
+CPPFLAGS=$save_CPPFLAGS
+LDFLAGS=$save_LDFLAGS
+LIBS=$save_LIBS
+
+
+
+else case e in #(
+  e) ac_cv_py_inner_simd=no ;;
+esac
+fi
+
+    unset _PY_SIMD_X86_FLAG
+   ;; #(
+  arm*) :
+
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for SIMD-compatible -march spec for host cpu $host_cpu" >&5
+printf %s "checking for SIMD-compatible -march spec for host cpu $host_cpu... " >&6; }
+    _PY_SIMD_ARM_FLAG="-march=$host_cpu+simd"
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $_PY_SIMD_ARM_FLAG" >&5
+printf "%s\n" "$_PY_SIMD_ARM_FLAG" >&6; }
+    as_CACHEVAR=`printf "%s\n" "ax_cv_check_cflags__$_PY_SIMD_ARM_FLAG" | sed "$as_sed_sh"`
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether the C compiler accepts $_PY_SIMD_ARM_FLAG" >&5
+printf %s "checking whether the C compiler accepts $_PY_SIMD_ARM_FLAG... " >&6; }
+if eval test \${$as_CACHEVAR+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e)
+  ax_check_save_flags=$CFLAGS
+  if test x"$GCC" = xyes ; then
+    add_gnu_werror="-Werror"
+  fi
+  CFLAGS="$CFLAGS  $_PY_SIMD_ARM_FLAG $add_gnu_werror"
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main (void)
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+  eval "$as_CACHEVAR=yes"
+else case e in #(
+  e) eval "$as_CACHEVAR=no" ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+  CFLAGS=$ax_check_save_flags ;;
+esac
+fi
+eval ac_res=\$$as_CACHEVAR
+	       { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
+printf "%s\n" "$ac_res" >&6; }
+if eval test \"x\$"$as_CACHEVAR"\" = x"yes"
+then :
+
+      save_CFLAGS=$CFLAGS
+save_CPPFLAGS=$CPPFLAGS
+save_LDFLAGS=$LDFLAGS
+save_LIBS=$LIBS
+
+
+        CFLAGS="$CFLAGS $_PY_SIMD_ARM_FLAG"
+        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main (void)
+{
+
+/* 128-bit vector of 16 unsigned bytes */
+typedef unsigned char v16u8 __attribute__((vector_size(16)));
+/* 128-bit vector of 16 signed bytes */
+typedef signed char v16s8 __attribute__((vector_size(16)));
+
+v16u8 arg1 = {1, 1, 1, 1, 1, 1, 1, 1};
+v16u8 arg2 = {2, 2, 2, 2, 2, 2, 2, 2};
+v16u8 hi = (v16u8)((v16s8)arg1 > arg2);
+v16u8 lo = (v16u8)((v16s8)arg2 > arg1);
+
+v16u8 result0 = __builtin_shufflevector(hi, lo,
+  0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23);
+v16u8 result1 = __builtin_shufflevector(hi, lo,
+  8, 24, 9, 25, 10, 26, 11, 27, 12, 28, 13, 29, 14, 30, 15, 31);
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+  ac_cv_py_inner_simd="$_PY_SIMD_ARM_FLAG"
+else case e in #(
+  e) ac_cv_py_inner_simd=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+
+CFLAGS=$save_CFLAGS
+CPPFLAGS=$save_CPPFLAGS
+LDFLAGS=$save_LDFLAGS
+LIBS=$save_LIBS
+
+
+
+else case e in #(
+  e) ac_cv_py_inner_simd=no ;;
+esac
+fi
+
+    unset _PY_SIMD_ARM_FLAG
+   ;; #(
+  aarch64-*) :
+
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: 'aarch64' is not a recognized base for -march=...
+                 See discussion at https://gcc.gnu.org/onlinedocs/gcc/ARM-Options.html" >&5
+printf "%s\n" "$as_me: WARNING: 'aarch64' is not a recognized base for -march=...
+                 See discussion at https://gcc.gnu.org/onlinedocs/gcc/ARM-Options.html" >&2;}
+    ac_cv_py_inner_simd=no
+   ;; #(
+  *) :
+    ac_cv_py_inner_simd=no ;;
+esac
+ ;;
+esac
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_py_inner_simd" >&5
+printf "%s\n" "$ac_cv_py_inner_simd" >&6; }
+echo "ac_cv_py_inner_simd=$ac_cv_py_inner_simd" >&2
+
+
+PY_INTERNAL_SIMD_MODULES='Python/pystrhex.o'
+
+
+printf "%s\n" "#define PY_INTERNAL_CAN_COMPILE_SIMD 0" >>confdefs.h
+
+case $ac_cv_py_inner_simd in #(
+  no) :
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: Python internals are not being built with SIMD support" >&5
+printf "%s\n" "$as_me: Python internals are not being built with SIMD support" >&6;} ;; #(
+  *) :
+
+    PY_INTERNAL_SIMD_CFLAGS="$ac_cv_py_inner_simd"
+    PY_INTERNAL_SIMD_CFLAGS_ARG="CFLAGS+=${PY_INTERNAL_SIMD_CFLAGS}"
+    PY_INTERNAL_CAN_COMPILE_SIMD=1
+   ;;
+esac
 
 
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for stdlib extension module _testcapi" >&5

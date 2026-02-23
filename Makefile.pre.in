@@ -1914,6 +1914,7 @@ regen-all: regen-cases regen-typeslots \
 
 ############################################################################
 # Special rules for object files
+@PY_INTERNAL_SIMD_MODULES@: @PY_INTERNAL_SIMD_CFLAGS_ARG@
 
 Modules/getbuildinfo.o: $(PARSER_OBJS) \
 		$(OBJECT_OBJS) \

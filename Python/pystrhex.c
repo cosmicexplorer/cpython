@@ -21,35 +21,7 @@ _Py_hexlify_scalar(const unsigned char *src, Py_UCS1 *dst, Py_ssize_t len)
     }
 }
 
-/* Portable SIMD optimization for hexlify using GCC/Clang vector extensions.
-   Uses __builtin_shufflevector for portable interleave that compiles to
-   native SIMD instructions (SSE2 punpcklbw/punpckhbw on x86-64 [always],
-   NEON zip1/zip2 on ARM64 [always], & vzip on ARM32 when compiler flags
-   for the target microarch allow it [try -march=native if running 32-bit
-   on an rpi3 or later]).
-
-   Requirements:
-   - GCC 12+ or Clang 3.0+ (for __builtin_shufflevector)
-   - x86-64, ARM64, or ARM32 with NEON
-
-   Performance:
-   - Up to 11x faster on larger data than the scalar code.
-   - For more common small data it varies between 1.1-3x faster.
-
-   Even faster is possible for big data using AVX2 or AVX512 but
-   that adds complication. Honestly, who really hexes _huge_ data?!
-
-   Speeding up the 16-64 byte cases fits nicely with md5 through sha512.
-*/
-#if (defined(__x86_64__) || defined(__aarch64__) || \
-     (defined(__arm__) && defined(__ARM_NEON))) && \
-    (defined(__clang__) || (defined(__GNUC__) && __GNUC__ >= 12))
-#  define PY_HEXLIFY_CAN_COMPILE_SIMD 1
-#else
-#  define PY_HEXLIFY_CAN_COMPILE_SIMD 0
-#endif
-
-#if PY_HEXLIFY_CAN_COMPILE_SIMD
+#if PY_INNER_CAN_COMPILE_SIMD
 
 /* 128-bit vector of 16 unsigned bytes */
 typedef unsigned char v16u8 __attribute__((vector_size(16)));
@@ -122,7 +94,7 @@ _Py_hexlify_simd(const unsigned char *src, Py_UCS1 *dst, Py_ssize_t len)
     _Py_hexlify_scalar(src + i, dst, len - i);
 }
 
-#endif /* PY_HEXLIFY_CAN_COMPILE_SIMD */
+#endif /* PY_INNER_CAN_COMPILE_SIMD */
 
 static PyObject *_Py_strhex_impl(const char* argbuf, const Py_ssize_t arglen,
                                  PyObject* sep, int bytes_per_sep_group,
@@ -202,7 +174,7 @@ static PyObject *_Py_strhex_impl(const char* argbuf, const Py_ssize_t arglen,
     unsigned char c;
 
     if (bytes_per_sep_group == 0) {
-#if PY_HEXLIFY_CAN_COMPILE_SIMD
+#if PY_INNER_CAN_COMPILE_SIMD
         if (arglen >= 16) {
             // little vector units go brrrr...
             _Py_hexlify_simd((const unsigned char *)argbuf, retbuf, arglen);
@@ -219,7 +191,7 @@ static PyObject *_Py_strhex_impl(const char* argbuf, const Py_ssize_t arglen,
         Py_ssize_t chunk;
         unsigned int k;
 
-#if PY_HEXLIFY_CAN_COMPILE_SIMD
+#if PY_INNER_CAN_COMPILE_SIMD
         /* SIMD path for separator groups >= 8 bytes.
            SIMD hexlify to output buffer, then shuffle in-place to insert
            separators. Working backwards avoids overlap issues since we're
@@ -261,7 +233,7 @@ static PyObject *_Py_strhex_impl(const char* argbuf, const Py_ssize_t arglen,
             }
             goto done_hexlify;
         }
-#endif /* PY_HEXLIFY_CAN_COMPILE_SIMD */
+#endif /* PY_INNER_CAN_COMPILE_SIMD */
 
         if (bytes_per_sep_group < 0) {
             i = j = 0;
@@ -300,7 +272,7 @@ static PyObject *_Py_strhex_impl(const char* argbuf, const Py_ssize_t arglen,
         }
     }
 
-#if PY_HEXLIFY_CAN_COMPILE_SIMD
+#if PY_INNER_CAN_COMPILE_SIMD
 done_hexlify:
 #endif
 

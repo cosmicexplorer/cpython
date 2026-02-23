@@ -8233,6 +8233,110 @@ PY_STDLIB_MOD([_ssl], [], [test "$ac_cv_working_openssl_ssl" = yes],
 PY_STDLIB_MOD([_hashlib], [], [test "$ac_cv_working_openssl_hashlib" = yes],
   [$OPENSSL_INCLUDES], [$OPENSSL_LDFLAGS $OPENSSL_LDFLAGS_RPATH $LIBCRYPTO_LIBS])
 
+dnl Portable SIMD optimization for hexlify using GCC/Clang vector extensions.
+dnl Uses __builtin_shufflevector for portable interleave that compiles to
+dnl native SIMD instructions (SSE2 punpcklbw/punpckhbw on x86-64 [always],
+dnl NEON zip1/zip2 on ARM64 [always], & vzip on ARM32 when compiler flags
+dnl for the target microarch allow it [try -march=native if running 32-bit
+dnl on an rpi3 or later]).
+
+dnl Requirements:
+dnl - GCC 12+ or Clang 3.0+ (for __builtin_shufflevector)
+dnl - x86-64, ARM64, or ARM32 with NEON
+
+dnl Performance:
+dnl - Up to 11x faster on larger data than the scalar code.
+dnl - For more common small data it varies between 1.1-3x faster.
+
+dnl Even faster is possible for big data using AVX2 or AVX512 but
+dnl that adds complication. Honestly, who really hexes _huge_ data?!
+
+dnl Speeding up the 16-64 byte cases fits nicely with md5 through sha512.
+m4_define([_py_inner_simd_test_program], [
+/* 128-bit vector of 16 unsigned bytes */
+typedef unsigned char v16u8 __attribute__((vector_size(16)));
+/* 128-bit vector of 16 signed bytes */
+typedef signed char v16s8 __attribute__((vector_size(16)));
+
+v16u8 arg1 = {1, 1, 1, 1, 1, 1, 1, 1};
+v16u8 arg2 = {2, 2, 2, 2, 2, 2, 2, 2};
+v16u8 hi = (v16u8)((v16s8)arg1 > arg2);
+v16u8 lo = (v16u8)((v16s8)arg2 > arg1);
+
+v16u8 result0 = __builtin_shufflevector(hi, lo,
+  0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23);
+v16u8 result1 = __builtin_shufflevector(hi, lo,
+  8, 24, 9, 25, 10, 26, 11, 27, 12, 28, 13, 29, 14, 30, 15, 31);
+])dnl
+
+AC_CACHE_CHECK([for simd flags, types, and functions], [ac_cv_py_inner_simd], [
+echo
+AS_CASE([$host],
+  [*-*-emscripten|*-*-wasi*|wasm32-*-*|wasm64-*-*], [
+    AC_MSG_CHECKING([for SIMD-compatible flag for host $host])
+    _PY_SIMD_WASM_FLAG=-msimd128
+    AC_MSG_RESULT([$_PY_SIMD_WASM_FLAG])
+    AX_CHECK_COMPILE_FLAG([$_PY_SIMD_WASM_FLAG], [
+      WITH_SAVE_ENV([
+        CFLAGS="$CFLAGS $_PY_SIMD_WASM_FLAG"
+        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [_py_inner_simd_test_program])],
+           [ac_cv_py_inner_simd="$_PY_SIMD_WASM_FLAG"],
+           [ac_cv_py_inner_simd=no])
+      ])
+    ], [ac_cv_py_inner_simd=no])
+    unset _PY_SIMD_WASM_FLAG
+  ],
+  [x86*], [
+    AC_MSG_CHECKING([for SIMD-compatible flag for host cpu $host_cpu])
+    _PY_SIMD_X86_FLAG=-msse2
+    AC_MSG_RESULT([$_PY_SIMD_X86_FLAG])
+    AX_CHECK_COMPILE_FLAG([$_PY_SIMD_X86_FLAG], [
+      WITH_SAVE_ENV([
+        CFLAGS="$CFLAGS $_PY_SIMD_X86_FLAG"
+        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [_py_inner_simd_test_program])],
+            [ac_cv_py_inner_simd="$_PY_SIMD_X86_FLAG"],
+            [ac_cv_py_inner_simd=no])
+      ])
+    ], [ac_cv_py_inner_simd=no])
+    unset _PY_SIMD_X86_FLAG
+  ],
+  [arm*], [
+    AC_MSG_CHECKING([for SIMD-compatible -march spec for host cpu $host_cpu])
+    _PY_SIMD_ARM_FLAG="-march=$host_cpu+simd"
+    AC_MSG_RESULT([$_PY_SIMD_ARM_FLAG])
+    AX_CHECK_COMPILE_FLAG([$_PY_SIMD_ARM_FLAG], [
+      WITH_SAVE_ENV([
+        CFLAGS="$CFLAGS $_PY_SIMD_ARM_FLAG"
+        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [_py_inner_simd_test_program])],
+           [ac_cv_py_inner_simd="$_PY_SIMD_ARM_FLAG"],
+           [ac_cv_py_inner_simd=no])
+      ])
+    ], [ac_cv_py_inner_simd=no])
+    unset _PY_SIMD_ARM_FLAG
+  ],
+  [aarch64-*], [
+    AC_MSG_WARN(['aarch64' is not a recognized base for -march=...
+                 See discussion at https://gcc.gnu.org/onlinedocs/gcc/ARM-Options.html])
+    ac_cv_py_inner_simd=no
+  ],
+  [ac_cv_py_inner_simd=no])
+])
+echo "ac_cv_py_inner_simd=$ac_cv_py_inner_simd" >&2
+AC_SUBST([PY_INTERNAL_SIMD_CFLAGS])
+AC_SUBST([PY_INTERNAL_SIMD_CFLAGS_ARG])
+AC_SUBST([PY_INTERNAL_SIMD_MODULES], 'm4_normalize(m4_flatten([
+Python/pystrhex.o
+]))')
+AC_DEFINE([PY_INTERNAL_CAN_COMPILE_SIMD], [0],
+ [Whether to build support for SIMD implementations of internal Python logic.])
+AS_CASE([$ac_cv_py_inner_simd],
+  [no], [AC_MSG_NOTICE([Python internals are not being built with SIMD support])],
+  [
+    PY_INTERNAL_SIMD_CFLAGS="$ac_cv_py_inner_simd"
+    PY_INTERNAL_SIMD_CFLAGS_ARG="CFLAGS+=${PY_INTERNAL_SIMD_CFLAGS}"
+    PY_INTERNAL_CAN_COMPILE_SIMD=1
+  ])
+
 dnl test modules
 PY_STDLIB_MOD([_testcapi],
     [test "$TEST_MODULES" = yes],
